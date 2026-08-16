@@ -18,6 +18,7 @@
 package baritone.utils;
 
 import baritone.Baritone;
+import baritone.api.utils.Helper;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.Holder;
 import net.minecraft.core.component.DataComponents;
@@ -158,11 +159,22 @@ public class ToolSet {
         }
 
         int best = getBestSlotWithinTier(b, preferSilkTouch, this.maxTier);
+        boolean fellBack = false;
         if (best == -1 && this.maxTier >= 0) {
             // no tool within the tier limit could break this block, fall back to the original unrestricted selection
             best = getBestSlotWithinTier(b, preferSilkTouch, -1);
+            fellBack = true;
         }
-        return best == -1 ? 0 : best; // default to slot 0 if nothing at all can be used
+        if (best == -1) {
+            best = 0; // default to slot 0 if nothing at all can be used
+        }
+        if (Baritone.settings().chatDebug.value) {
+            ItemStack stack = player.getInventory().getItem(best);
+            Helper.HELPER.logDebug("[ToolSet] " + b + " maxTier=" + this.maxTier
+                    + (fellBack ? " (fallback, no tool within tier)" : "")
+                    + " -> slot " + best + " (" + (stack.isEmpty() ? "hand" : stack.getItem()) + ", tier " + getMaterialCost(stack) + ")");
+        }
+        return best;
     }
 
     private int getBestSlotWithinTier(Block b, boolean preferSilkTouch, int maxTier) {
