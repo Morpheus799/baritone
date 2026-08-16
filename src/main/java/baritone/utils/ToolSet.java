@@ -61,6 +61,12 @@ public class ToolSet {
     private final LocalPlayer player;
 
     /**
+     * The maximum tool material tier to consider when selecting a tool.
+     * Matches the indices of {@link #materialTagsPriorityList}. -1 means no limit.
+     */
+    private final int maxTier;
+
+    /**
      * Used for evaluating the material cost of a tool.
      * see {@link #getMaterialCost(ItemStack)}
      * Prefer tools with lower material cost (lower index in this list).
@@ -75,8 +81,13 @@ public class ToolSet {
     );
 
     public ToolSet(LocalPlayer player) {
+        this(player, -1);
+    }
+
+    public ToolSet(LocalPlayer player, int maxTier) {
         breakStrengthCache = new HashMap<>();
         this.player = player;
+        this.maxTier = maxTier;
 
         if (Baritone.settings().considerPotionEffects.value) {
             double amplifier = potionAmplifier();
@@ -104,7 +115,7 @@ public class ToolSet {
      * @param itemStack a possibly empty ItemStack
      * @return values from 0 up
      */
-    private int getMaterialCost(ItemStack itemStack) {
+    public static int getMaterialCost(ItemStack itemStack) {
         for (int i = 0; i < materialTagsPriorityList.size(); i++) {
             final TagKey<Item> tag = materialTagsPriorityList.get(i);
             if (itemStack.is(tag)) return i;
@@ -146,7 +157,16 @@ public class ToolSet {
             return player.getInventory().getSelectedSlot();
         }
 
-        int best = 0;
+        int best = getBestSlotWithinTier(b, preferSilkTouch, this.maxTier);
+        if (best == -1 && this.maxTier >= 0) {
+            // no tool within the tier limit could break this block, fall back to the original unrestricted selection
+            best = getBestSlotWithinTier(b, preferSilkTouch, -1);
+        }
+        return best == -1 ? 0 : best; // default to slot 0 if nothing at all can be used
+    }
+
+    private int getBestSlotWithinTier(Block b, boolean preferSilkTouch, int maxTier) {
+        int best = -1;
         double highestSpeed = Double.NEGATIVE_INFINITY;
         int lowestCost = Integer.MIN_VALUE;
         boolean bestSilkTouch = false;
@@ -158,6 +178,9 @@ public class ToolSet {
             }
 
             if (Baritone.settings().itemSaver.value && (itemStack.getDamageValue() + Baritone.settings().itemSaverThreshold.value) >= itemStack.getMaxDamage() && itemStack.getMaxDamage() > 1) {
+                continue;
+            }
+            if (maxTier >= 0 && getMaterialCost(itemStack) > maxTier) {
                 continue;
             }
             double speed = calculateSpeedVsBlock(itemStack, blockState);

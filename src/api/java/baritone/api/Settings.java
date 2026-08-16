@@ -116,6 +116,18 @@ public final class Settings {
     public final Setting<Boolean> autoTool = new Setting<>(true);
 
     /**
+     * The maximum tool material tier that Baritone may use when automatically selecting a tool for breaking
+     * blocks in the way of a movement (path clearing).
+     * <p>
+     * -1 to disable the limit (default). Otherwise, valid values are 0 (wood) through 5 (netherite),
+     * corresponding to the order of the tool material tiers in ToolSet.
+     * <p>
+     * This only affects path clearing. Mining target blocks (e.g. {@code #mine}, farming, or breaking
+     * incorrect blocks while building) always uses the original unrestricted tool selection.
+     */
+    public final Setting<Integer> pathClearMaxToolTier = new Setting<>(-1);
+
+    /**
      * It doesn't actually take twenty ticks to place a block, this cost is so high
      * because we want to generally conserve blocks which might be limited.
      * <p>

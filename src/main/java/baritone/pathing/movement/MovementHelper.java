@@ -663,6 +663,17 @@ public interface MovementHelper extends ActionCosts, Helper {
         }
     }
 
+    /**
+     * AutoTool for a specific block that is obstructing a movement ("path clearing"), respecting
+     * {@link baritone.api.Settings#pathClearMaxToolTier}
+     *
+     * @param ctx The player context
+     * @param b   the blockstate to mine
+     */
+    static void switchToBestToolForPathClear(IPlayerContext ctx, BlockState b) {
+        switchToBestToolFor(ctx, b, new ToolSet(ctx.player(), BaritoneAPI.getSettings().pathClearMaxToolTier.value), BaritoneAPI.getSettings().preferSilkTouch.value);
+    }
+
     static void moveTowards(IPlayerContext ctx, MovementState state, BlockPos pos) {
         state.setTarget(new MovementTarget(
                 RotationUtils.calcRotationFromVec3d(ctx.playerHead(),
