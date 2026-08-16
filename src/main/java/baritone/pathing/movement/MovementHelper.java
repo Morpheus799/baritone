@@ -671,7 +671,38 @@ public interface MovementHelper extends ActionCosts, Helper {
      * @param b   the blockstate to mine
      */
     static void switchToBestToolForPathClear(IPlayerContext ctx, BlockState b) {
-        switchToBestToolFor(ctx, b, new ToolSet(ctx.player(), BaritoneAPI.getSettings().pathClearMaxToolTier.value), BaritoneAPI.getSettings().preferSilkTouch.value);
+        if (!Baritone.settings().autoTool.value || Baritone.settings().assumeExternalAutoTool.value) {
+            return;
+        }
+        int maxTier = BaritoneAPI.getSettings().pathClearMaxToolTier.value;
+        boolean preferSilkTouch = BaritoneAPI.getSettings().preferSilkTouch.value;
+        Helper.HELPER.logDebug("[PathClear] selecting tool for " + b + " with maxTier=" + maxTier);
+        int slot;
+        if (maxTier >= 0) {
+            ToolSet ts = new ToolSet(ctx.player(), maxTier);
+            slot = ts.getBestSlotWithinTier(b.getBlock(), preferSilkTouch, maxTier);
+            if (slot == -1 && Baritone.settings().allowInventory.value) {
+                // no in-tier tool on the hotbar, try to fetch one from the main inventory
+                int backpack = ts.getBestBackpackSlotWithinTier(b.getBlock(), preferSilkTouch, maxTier);
+                if (backpack != -1) {
+                    Baritone baritone = (Baritone) BaritoneAPI.getProvider().getBaritoneForPlayer(ctx.player());
+                    int dest = baritone.getInventoryBehavior().attemptToBringToHotbar(backpack);
+                    if (dest != -1) {
+                        slot = dest;
+                        Helper.HELPER.logDebug("[PathClear] fetched " + ctx.player().getInventory().getItem(dest) + " from backpack slot " + backpack);
+                    } else {
+                        Helper.HELPER.logDebug("[PathClear] waiting to move backpack slot " + backpack + " to the hotbar");
+                    }
+                }
+            }
+            if (slot == -1) {
+                Helper.HELPER.logDebug("[PathClear] no in-tier tool available, falling back to unrestricted hotbar selection");
+                slot = new ToolSet(ctx.player(), -1).getBestSlot(b.getBlock(), preferSilkTouch);
+            }
+        } else {
+            slot = new ToolSet(ctx.player(), -1).getBestSlot(b.getBlock(), preferSilkTouch);
+        }
+        ctx.player().getInventory().setSelectedSlot(slot);
     }
 
     static void moveTowards(IPlayerContext ctx, MovementState state, BlockPos pos) {

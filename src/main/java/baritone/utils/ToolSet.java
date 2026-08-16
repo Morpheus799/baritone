@@ -161,9 +161,16 @@ public class ToolSet {
         int best = getBestSlotWithinTier(b, preferSilkTouch, this.maxTier);
         boolean fellBack = false;
         if (best == -1 && this.maxTier >= 0) {
-            // no tool within the tier limit could break this block, fall back to the original unrestricted selection
-            best = getBestSlotWithinTier(b, preferSilkTouch, -1);
-            fellBack = true;
+            if (pathingCalculation && Baritone.settings().allowInventory.value) {
+                // for cost estimation we can assume that the best in-tier tool in the main inventory
+                // will be moved to the hotbar, since execution will fetch it
+                best = getBestSlotWithinTier(b, preferSilkTouch, this.maxTier, 9, 36);
+            }
+            if (best == -1) {
+                // no tool within the tier limit could break this block, fall back to the original unrestricted selection
+                best = getBestSlotWithinTier(b, preferSilkTouch, -1);
+                fellBack = true;
+            }
         }
         if (best == -1) {
             best = 0; // default to slot 0 if nothing at all can be used
@@ -177,13 +184,24 @@ public class ToolSet {
         return best;
     }
 
-    private int getBestSlotWithinTier(Block b, boolean preferSilkTouch, int maxTier) {
+    public int getBestSlotWithinTier(Block b, boolean preferSilkTouch, int maxTier) {
+        return getBestSlotWithinTier(b, preferSilkTouch, maxTier, 0, 9);
+    }
+
+    /**
+     * The best tool within the tier limit in the main inventory (excluding the hotbar), or -1 if there is none
+     */
+    public int getBestBackpackSlotWithinTier(Block b, boolean preferSilkTouch, int maxTier) {
+        return getBestSlotWithinTier(b, preferSilkTouch, maxTier, 9, 36);
+    }
+
+    private int getBestSlotWithinTier(Block b, boolean preferSilkTouch, int maxTier, int startIncl, int endExcl) {
         int best = -1;
         double highestSpeed = Double.NEGATIVE_INFINITY;
         int lowestCost = Integer.MIN_VALUE;
         boolean bestSilkTouch = false;
         BlockState blockState = b.defaultBlockState();
-        for (int i = 0; i < 9; i++) {
+        for (int i = startIncl; i < endExcl; i++) {
             ItemStack itemStack = player.getInventory().getItem(i);
             if (!Baritone.settings().useSwordToMine.value && itemStack.is(ItemTags.SWORDS)) {
                 continue;
