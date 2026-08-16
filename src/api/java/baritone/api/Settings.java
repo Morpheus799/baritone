@@ -122,6 +122,10 @@ public final class Settings {
      * -1 to disable the limit (default). Otherwise, valid values are 0 (wood) through 5 (netherite),
      * corresponding to the order of the tool material tiers in ToolSet.
      * <p>
+     * If no tool within the tier limit is on the hotbar, Baritone will attempt to move one from the
+     * main inventory to the hotbar (requires {@code allowInventory}); if that is not possible it
+     * falls back to the original unrestricted hotbar selection.
+     * <p>
      * This only affects path clearing. Mining target blocks (e.g. {@code #mine}, farming, or breaking
      * incorrect blocks while building) always uses the original unrestricted tool selection.
      */

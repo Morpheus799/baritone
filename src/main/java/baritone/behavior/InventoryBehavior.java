@@ -89,6 +89,24 @@ public final class InventoryBehavior extends Behavior implements Helper {
         return true;
     }
 
+    /**
+     * Attempts to move the item in the given main inventory slot (9-35) into a free hotbar slot (1-7).
+     * <p>
+     * If the move cannot be performed this tick (e.g. due to the move cooldown or the stationary
+     * requirement), it is retried automatically on subsequent ticks, after which the item will be
+     * found on the hotbar by normal tool selection.
+     *
+     * @param inMainInvy The main inventory slot to move
+     * @return The hotbar slot the item was moved into, or -1 if the move could not be performed this tick
+     */
+    public int attemptToBringToHotbar(int inMainInvy) {
+        OptionalInt destination = getTempHotbarSlot(slot -> false);
+        if (destination.isPresent() && requestSwapWithHotBar(inMainInvy, destination.getAsInt())) {
+            return destination.getAsInt();
+        }
+        return -1;
+    }
+
     public OptionalInt getTempHotbarSlot(Predicate<Integer> disallowedHotbar) {
         // we're using 0 and 8 for pickaxe and throwaway
         ArrayList<Integer> candidates = new ArrayList<>();
