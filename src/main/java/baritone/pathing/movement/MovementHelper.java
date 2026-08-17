@@ -34,6 +34,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.core.Holder;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.item.enchantment.ItemEnchantments;
@@ -676,7 +677,7 @@ public interface MovementHelper extends ActionCosts, Helper {
         }
         int maxTier = BaritoneAPI.getSettings().pathClearMaxToolTier.value;
         boolean preferSilkTouch = BaritoneAPI.getSettings().preferSilkTouch.value;
-        Helper.HELPER.logDebug("[PathClear] selecting tool for " + b + " with maxTier=" + maxTier);
+        String extra = "";
         int slot;
         if (maxTier >= 0) {
             ToolSet ts = new ToolSet(ctx.player(), maxTier);
@@ -689,20 +690,23 @@ public interface MovementHelper extends ActionCosts, Helper {
                     int dest = baritone.getInventoryBehavior().attemptToBringToHotbar(backpack);
                     if (dest != -1) {
                         slot = dest;
-                        Helper.HELPER.logDebug("[PathClear] fetched " + ctx.player().getInventory().getItem(dest) + " from backpack slot " + backpack);
+                        extra = " (fetched from backpack slot " + backpack + ")";
                     } else {
-                        Helper.HELPER.logDebug("[PathClear] waiting to move backpack slot " + backpack + " to the hotbar");
+                        extra = " (waiting to fetch from backpack slot " + backpack + ")";
                     }
                 }
             }
             if (slot == -1) {
-                Helper.HELPER.logDebug("[PathClear] no in-tier tool available, falling back to unrestricted hotbar selection");
+                extra = " (fallback, no tool within tier)";
                 slot = new ToolSet(ctx.player(), -1).getBestSlot(b.getBlock(), preferSilkTouch);
             }
         } else {
             slot = new ToolSet(ctx.player(), -1).getBestSlot(b.getBlock(), preferSilkTouch);
         }
         ctx.player().getInventory().setSelectedSlot(slot);
+        ItemStack stack = ctx.player().getInventory().getItem(slot);
+        ToolSet.logDebugDeduped("[PathClear] " + b + " maxTier=" + maxTier + " -> slot " + slot
+                + " (" + (stack.isEmpty() ? "hand" : stack.getItem()) + ")" + extra);
     }
 
     static void moveTowards(IPlayerContext ctx, MovementState state, BlockPos pos) {
