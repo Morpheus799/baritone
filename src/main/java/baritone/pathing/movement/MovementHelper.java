@@ -675,6 +675,13 @@ public interface MovementHelper extends ActionCosts, Helper {
         if (!Baritone.settings().autoTool.value || Baritone.settings().assumeExternalAutoTool.value) {
             return;
         }
+        Baritone baritone = (Baritone) BaritoneAPI.getProvider().getBaritoneForPlayer(ctx.player());
+        if (baritone != null && baritone.getMineProcess().isTargetBlock(b)) {
+            // target blocks (e.g. #mine ores) always use the original unrestricted tool selection,
+            // even when a movement breaks them as part of path clearing
+            switchToBestToolFor(ctx, b);
+            return;
+        }
         int maxTier = BaritoneAPI.getSettings().pathClearMaxToolTier.value;
         boolean preferSilkTouch = BaritoneAPI.getSettings().preferSilkTouch.value;
         String extra = "";
@@ -685,8 +692,7 @@ public interface MovementHelper extends ActionCosts, Helper {
             if (slot == -1 && Baritone.settings().allowInventory.value) {
                 // no in-tier tool on the hotbar, try to fetch one from the main inventory
                 int backpack = ts.getBestBackpackSlotWithinTier(b.getBlock(), preferSilkTouch, maxTier);
-                if (backpack != -1) {
-                    Baritone baritone = (Baritone) BaritoneAPI.getProvider().getBaritoneForPlayer(ctx.player());
+                if (backpack != -1 && baritone != null) {
                     int dest = baritone.getInventoryBehavior().attemptToBringToHotbar(backpack);
                     if (dest != -1) {
                         slot = dest;
