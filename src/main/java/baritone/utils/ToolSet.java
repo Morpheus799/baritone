@@ -253,25 +253,27 @@ public class ToolSet {
             return player.getInventory().getSelectedSlot();
         }
 
-        // special blocks (ores etc.) ignore the tier cap and only require at least their minimum
-        // tier, so that they are never broken with a tool too weak to drop anything
+        // special blocks (ores etc.) get a backdoor through the tier cap: if a tool meeting their
+        // minimum tier is available, it may be used. If not, selection falls back to the normal
+        // rules so that pathfinding behavior is unchanged.
         int minTier = this.maxTier >= 0 ? getMinTierForBlock(b) : 0;
         int maxTier = minTier > 0 ? -1 : this.maxTier;
         int best = getBestSlotWithinTier(b, preferSilkTouch, minTier, maxTier);
         boolean fellBack = false;
-        if (best == -1 && this.maxTier >= 0 && minTier == 0) {
+        if (best == -1 && this.maxTier >= 0) {
             if (pathingCalculation && Baritone.settings().allowInventory.value) {
                 // for cost estimation we can assume that the best in-tier tool in the main inventory
                 // will be moved to the hotbar, since execution will fetch it
                 best = getBestSlotWithinTier(b, preferSilkTouch, 0, this.maxTier, 9, 36);
             }
             if (best == -1) {
-                // no tool within the tier limit could break this block, fall back to the original unrestricted selection
+                // no tool within the tier limit (or above the block's minimum tier) could break this
+                // block, fall back to the original unrestricted selection
                 best = getBestSlotWithinTier(b, preferSilkTouch, 0, -1);
                 fellBack = true;
             }
         }
-        if (best == -1 && minTier == 0) {
+        if (best == -1) {
             best = 0; // default to slot 0 if nothing at all can be used
         }
         ItemStack stack = player.getInventory().getItem(best);
@@ -348,13 +350,7 @@ public class ToolSet {
      * @return A double containing the destruction ticks with the best tool
      */
     private double getBestDestructionTime(Block b) {
-        int slot = getBestSlot(b, false, true);
-        if (slot == -1) {
-            // breaking this block would need a tool tier that isn't available (e.g. an ore that
-            // requires iron or better), treat it as unbreakable so pathing avoids it instead of wasting it
-            return -1;
-        }
-        ItemStack stack = player.getInventory().getItem(slot);
+        ItemStack stack = player.getInventory().getItem(getBestSlot(b, false, true));
         return calculateSpeedVsBlock(stack, b.defaultBlockState()) * avoidanceMultiplier(b);
     }
 
