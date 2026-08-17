@@ -22,6 +22,8 @@ import baritone.api.utils.Helper;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.Holder;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.Identifier;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.effect.MobEffects;
@@ -81,6 +83,20 @@ public class ToolSet {
         ItemTags.NETHERITE_TOOL_MATERIALS
     );
 
+    /**
+     * In 1.21.2+ the tool material tags (e.g. {@link ItemTags#DIAMOND_TOOL_MATERIALS}) are no longer
+     * applied to tool items, so tier detection falls back to matching vanilla item ids. Unknown
+     * (e.g. modded) items are not in this map and fall through to the tag check.
+     */
+    private static final Map<String, Integer> VANILLA_TOOL_TIERS = Map.ofEntries(
+            Map.entry("minecraft:wooden_sword", 0), Map.entry("minecraft:wooden_shovel", 0), Map.entry("minecraft:wooden_pickaxe", 0), Map.entry("minecraft:wooden_axe", 0), Map.entry("minecraft:wooden_hoe", 0),
+            Map.entry("minecraft:stone_sword", 1), Map.entry("minecraft:stone_shovel", 1), Map.entry("minecraft:stone_pickaxe", 1), Map.entry("minecraft:stone_axe", 1), Map.entry("minecraft:stone_hoe", 1),
+            Map.entry("minecraft:iron_sword", 2), Map.entry("minecraft:iron_shovel", 2), Map.entry("minecraft:iron_pickaxe", 2), Map.entry("minecraft:iron_axe", 2), Map.entry("minecraft:iron_hoe", 2),
+            Map.entry("minecraft:golden_sword", 3), Map.entry("minecraft:golden_shovel", 3), Map.entry("minecraft:golden_pickaxe", 3), Map.entry("minecraft:golden_axe", 3), Map.entry("minecraft:golden_hoe", 3),
+            Map.entry("minecraft:diamond_sword", 4), Map.entry("minecraft:diamond_shovel", 4), Map.entry("minecraft:diamond_pickaxe", 4), Map.entry("minecraft:diamond_axe", 4), Map.entry("minecraft:diamond_hoe", 4),
+            Map.entry("minecraft:netherite_sword", 5), Map.entry("minecraft:netherite_shovel", 5), Map.entry("minecraft:netherite_pickaxe", 5), Map.entry("minecraft:netherite_axe", 5), Map.entry("minecraft:netherite_hoe", 5)
+    );
+
     private static String lastDebugLog;
 
     /**
@@ -135,6 +151,16 @@ public class ToolSet {
      * @return values from 0 up
      */
     public static int getMaterialCost(ItemStack itemStack) {
+        if (itemStack.isEmpty()) {
+            return -1;
+        }
+        // the tool material tags are not applied to tool items on modern versions, so detect
+        // vanilla tool tiers by item id first; unknown (e.g. modded) items fall through to the tags
+        Identifier key = BuiltInRegistries.ITEM.getKey(itemStack.getItem());
+        Integer tier = key == null ? null : VANILLA_TOOL_TIERS.get(key.toString());
+        if (tier != null) {
+            return tier;
+        }
         for (int i = 0; i < materialTagsPriorityList.size(); i++) {
             final TagKey<Item> tag = materialTagsPriorityList.get(i);
             if (itemStack.is(tag)) return i;
