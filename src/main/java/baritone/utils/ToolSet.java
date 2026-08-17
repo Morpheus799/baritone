@@ -19,6 +19,7 @@ package baritone.utils;
 
 import baritone.Baritone;
 import baritone.api.utils.Helper;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.Holder;
 import net.minecraft.core.component.DataComponents;
@@ -38,6 +39,12 @@ import net.minecraft.world.item.enchantment.effects.EnchantmentAttributeEffect;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -123,21 +130,39 @@ public class ToolSet {
         return key == null ? 0 : MIN_TIER_BY_BLOCK.getOrDefault(key.toString(), 0);
     }
 
-    private static String lastDebugLog;
+    private static final Map<String, String> lastDebugLogByContext = new HashMap<>();
 
     /**
-     * Debug logging that only fires when the line changed since the last call, so that per-tick
-     * callers don't spam the chat. The line is also written to stdout, which ends up in the
-     * Minecraft log file (logs/latest.log).
+     * Debug logging that only fires when the line changed for its context (everything before the
+     * arrow), so that per-tick callers don't spam. The line is always appended to the
+     * logs/baritone.log file, and is additionally printed to chat when chatDebug is enabled.
      */
     public static void logDebugDeduped(String line) {
-        if (!Baritone.settings().chatDebug.value) {
-            return;
+        int arrow = line.indexOf(" -> ");
+        String context = arrow == -1 ? line : line.substring(0, arrow);
+        synchronized (lastDebugLogByContext) {
+            if (line.equals(lastDebugLogByContext.get(context))) {
+                return;
+            }
+            if (lastDebugLogByContext.size() > 100) {
+                lastDebugLogByContext.clear();
+            }
+            lastDebugLogByContext.put(context, line);
         }
-        if (!line.equals(lastDebugLog)) {
-            lastDebugLog = line;
-            System.out.println(line);
+        appendToLogFile(line);
+        if (Baritone.settings().chatDebug.value) {
             Helper.HELPER.logDebug(line);
+        }
+    }
+
+    private static synchronized void appendToLogFile(String line) {
+        try {
+            Path logFile = Minecraft.getInstance().gameDirectory.toPath().resolve("logs").resolve("baritone.log");
+            Files.createDirectories(logFile.getParent());
+            String entry = LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss")) + " " + line + System.lineSeparator();
+            Files.writeString(logFile, entry, StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+        } catch (Throwable ignored) {
+            // logging must never break the game
         }
     }
 
