@@ -126,6 +126,9 @@ public final class Settings {
      * main inventory to the hotbar (requires {@code allowInventory}); if that is not possible it
      * falls back to the original unrestricted hotbar selection.
      * <p>
+     * Ores and other blocks with a hardcoded minimum tool requirement may bypass this limit and be
+     * broken with at least that tier; if no such tool is available the normal selection rules apply.
+     * <p>
      * This only affects path clearing. Mining target blocks (e.g. {@code #mine}, farming, or breaking
      * incorrect blocks while building) always uses the original unrestricted tool selection.
      */

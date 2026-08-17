@@ -683,15 +683,17 @@ public interface MovementHelper extends ActionCosts, Helper {
             return;
         }
         int maxTier = BaritoneAPI.getSettings().pathClearMaxToolTier.value;
+        int minTier = ToolSet.getMinTierForBlock(b.getBlock());
         boolean preferSilkTouch = BaritoneAPI.getSettings().preferSilkTouch.value;
         String extra = "";
         int slot;
         if (maxTier >= 0) {
             ToolSet ts = new ToolSet(ctx.player(), maxTier);
-            slot = ts.getBestSlotWithinTier(b.getBlock(), preferSilkTouch, maxTier);
+            // special blocks (ores etc.) ignore the tier cap and only require at least their minimum tier
+            slot = ts.getBestSlotWithinTier(b.getBlock(), preferSilkTouch, minTier, minTier > 0 ? -1 : maxTier);
             if (slot == -1 && Baritone.settings().allowInventory.value) {
-                // no in-tier tool on the hotbar, try to fetch one from the main inventory
-                int backpack = ts.getBestBackpackSlotWithinTier(b.getBlock(), preferSilkTouch, maxTier);
+                // no eligible tool on the hotbar, try to fetch one from the main inventory
+                int backpack = ts.getBestBackpackSlotWithinTier(b.getBlock(), preferSilkTouch, minTier, minTier > 0 ? -1 : maxTier);
                 if (backpack != -1 && baritone != null) {
                     int dest = baritone.getInventoryBehavior().attemptToBringToHotbar(backpack);
                     if (dest != -1) {
@@ -703,7 +705,7 @@ public interface MovementHelper extends ActionCosts, Helper {
                 }
             }
             if (slot == -1) {
-                extra = " (fallback, no tool within tier)";
+                extra = " (fallback, no tool meeting the requirement)";
                 slot = new ToolSet(ctx.player(), -1).getBestSlot(b.getBlock(), preferSilkTouch);
             }
         } else {
@@ -711,8 +713,9 @@ public interface MovementHelper extends ActionCosts, Helper {
         }
         ctx.player().getInventory().setSelectedSlot(slot);
         ItemStack stack = ctx.player().getInventory().getItem(slot);
-        ToolSet.logDebugDeduped("[PathClear] " + b + " maxTier=" + maxTier + " -> slot " + slot
-                + " (" + (stack.isEmpty() ? "hand" : stack.getItem()) + ")" + extra);
+        ToolSet.logDebugDeduped("[PathClear] " + b + " maxTier=" + maxTier
+                + (minTier > 0 ? " minTier=" + minTier : "")
+                + " -> slot " + slot + " (" + (stack.isEmpty() ? "hand" : stack.getItem()) + ")" + extra);
     }
 
     static void moveTowards(IPlayerContext ctx, MovementState state, BlockPos pos) {
