@@ -671,48 +671,59 @@ public interface MovementHelper extends ActionCosts, Helper {
      * @param ctx The player context
      * @param b   the blockstate to mine
      */
-    static void switchToBestToolForPathClear(IPlayerContext ctx, BlockState b) {
+    /**
+     * AutoTool for a specific block that is obstructing a movement ("path clearing"), respecting
+     * {@link baritone.api.Settings#pathClearMaxToolTier}
+     *
+     * @param ctx The player context
+     * @param b   the blockstate to mine
+     * @return Whether the movement may proceed with breaking this block. Returns {@code false} when
+     * the tier cap is set and no eligible tool remains, in which case mining must stop.
+     */
+    static boolean switchToBestToolForPathClear(IPlayerContext ctx, BlockState b) {
         if (!Baritone.settings().autoTool.value || Baritone.settings().assumeExternalAutoTool.value) {
-            return;
+            return true;
         }
         Baritone baritone = (Baritone) BaritoneAPI.getProvider().getBaritoneForPlayer(ctx.player());
         if (baritone != null && baritone.getMineProcess().isTargetBlock(b)) {
             // target blocks (e.g. #mine ores) always use the original unrestricted tool selection,
             // even when a movement breaks them as part of path clearing
             switchToBestToolFor(ctx, b);
-            return;
+            return true;
         }
         int maxTier = BaritoneAPI.getSettings().pathClearMaxToolTier.value;
         int minTier = ToolSet.getMinTierForBlock(b.getBlock());
         boolean preferSilkTouch = BaritoneAPI.getSettings().preferSilkTouch.value;
         String extra = "";
-        int slot;
+        int slot = -1;
         if (maxTier >= 0) {
-            if (minTier > maxTier) {
-                // the tier limit is below what the block needs to drop anything, use the original
-                // unrestricted selection (backdoor) instead of wasting the block
-                slot = new ToolSet(ctx.player(), -1).getBestSlot(b.getBlock(), preferSilkTouch);
-                extra = " (backdoor, block needs tier " + minTier + ")";
-            } else {
-                ToolSet ts = new ToolSet(ctx.player(), maxTier);
-                slot = ts.getBestSlotWithinTier(b.getBlock(), preferSilkTouch, maxTier);
-                if (slot == -1 && Baritone.settings().allowInventory.value) {
-                    // no in-tier tool on the hotbar, try to fetch one from the main inventory
-                    int backpack = ts.getBestBackpackSlotWithinTier(b.getBlock(), preferSilkTouch, maxTier);
-                    if (backpack != -1 && baritone != null) {
-                        int dest = baritone.getInventoryBehavior().attemptToBringToHotbar(backpack);
-                        if (dest != -1) {
-                            slot = dest;
-                            extra = " (fetched from backpack slot " + backpack + ")";
-                        } else {
-                            extra = " (waiting to fetch from backpack slot " + backpack + ")";
-                        }
+            int lo = minTier > maxTier ? minTier : 0;
+            int hi = minTier > maxTier ? -1 : maxTier;
+            ToolSet ts = new ToolSet(ctx.player(), maxTier);
+            slot = ts.getBestSlotWithinTier(b.getBlock(), preferSilkTouch, lo, hi, ToolSet.requiresPickaxe(b.getBlock()));
+            if (slot == -1 && Baritone.settings().allowInventory.value) {
+                // no eligible tool on the hotbar, try to fetch one from the main inventory
+                int backpack = ts.getBestBackpackSlotWithinTier(b.getBlock(), preferSilkTouch, lo, hi, ToolSet.requiresPickaxe(b.getBlock()));
+                if (backpack != -1 && baritone != null) {
+                    int dest = baritone.getInventoryBehavior().attemptToBringToHotbar(backpack);
+                    if (dest != -1) {
+                        slot = dest;
+                        extra = " (fetched from backpack slot " + backpack + ")";
+                    } else {
+                        // the move is pending, wait for the next tick instead of stopping
+                        ToolSet.logDebugDeduped("[PathClear] " + b + " maxTier=" + maxTier
+                                + (minTier > 0 ? " minTier=" + minTier : "")
+                                + " -> waiting to fetch from backpack slot " + backpack);
+                        return true;
                     }
                 }
-                if (slot == -1) {
-                    extra = " (fallback, no tool within tier)";
-                    slot = new ToolSet(ctx.player(), -1).getBestSlot(b.getBlock(), preferSilkTouch);
-                }
+            }
+            if (slot == -1) {
+                // no eligible tool remains, stop mining instead of falling back to better tools
+                ToolSet.logDebugDeduped("[PathClear] " + b + " maxTier=" + maxTier
+                        + (minTier > 0 ? " minTier=" + minTier : "")
+                        + " -> stopped (no eligible tool available)");
+                return false;
             }
         } else {
             slot = new ToolSet(ctx.player(), -1).getBestSlot(b.getBlock(), preferSilkTouch);
@@ -722,6 +733,7 @@ public interface MovementHelper extends ActionCosts, Helper {
         ToolSet.logDebugDeduped("[PathClear] " + b + " maxTier=" + maxTier
                 + (minTier > 0 ? " minTier=" + minTier : "")
                 + " -> slot " + slot + " (" + (stack.isEmpty() ? "hand" : stack.getItem()) + ")" + extra);
+        return true;
     }
 
     static void moveTowards(IPlayerContext ctx, MovementState state, BlockPos pos) {

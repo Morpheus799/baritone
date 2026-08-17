@@ -123,8 +123,13 @@ public final class Settings {
      * corresponding to the order of the tool material tiers in ToolSet.
      * <p>
      * If no tool within the tier limit is on the hotbar, Baritone will attempt to move one from the
-     * main inventory to the hotbar (requires {@code allowInventory}); if that is not possible it
-     * falls back to the original unrestricted hotbar selection.
+     * main inventory to the hotbar (requires {@code allowInventory}).
+     * <p>
+     * When the limit is set and no eligible tool can be found at all (for blocks that need a
+     * pickaxe: no pickaxe within the limit, or above the block's minimum tier as a backdoor), path
+     * clearing stops breaking instead of falling back to better tools. Blocks that don't need a
+     * pickaxe (e.g. wood or gravel) accept any in-limit tool, so a missing axe or shovel doesn't
+     * stop mining while an in-limit pickaxe remains.
      * <p>
      * Ores and other blocks with a hardcoded minimum tool requirement only bypass this limit when it
      * is below what the block needs to drop anything; otherwise they are mined with the best

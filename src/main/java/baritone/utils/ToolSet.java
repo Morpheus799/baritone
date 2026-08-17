@@ -31,6 +31,7 @@ import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.EnchantmentEffectComponents;
 import net.minecraft.world.item.enchantment.Enchantments;
@@ -128,6 +129,18 @@ public class ToolSet {
     public static int getMinTierForBlock(Block b) {
         Identifier key = BuiltInRegistries.BLOCK.getKey(b);
         return key == null ? 0 : MIN_TIER_BY_BLOCK.getOrDefault(key.toString(), 0);
+    }
+
+    private static final ItemStack PICKAXE_REFERENCE = new ItemStack(Items.DIAMOND_PICKAXE);
+
+    /**
+     * Whether breaking the given block requires a pickaxe to be effective. When the tier cap is
+     * set and no in-cap pickaxe remains, path clearing stops breaking these blocks instead of
+     * falling back to better tools. Blocks that don't require a pickaxe (e.g. wood or gravel)
+     * never trigger the stop.
+     */
+    public static boolean requiresPickaxe(Block b) {
+        return PICKAXE_REFERENCE.isCorrectToolForDrops(b.defaultBlockState());
     }
 
     private static final Map<String, String> lastDebugLogByContext = new HashMap<>();
@@ -253,38 +266,37 @@ public class ToolSet {
             return player.getInventory().getSelectedSlot();
         }
 
-        // special blocks (ores etc.) only get a backdoor through the tier cap when the cap is below
-        // what the block needs to drop anything: in that case the original unrestricted selection
-        // is used. Otherwise the cap applies normally (e.g. gold ore with an iron cap is mined
-        // with the iron pickaxe, not the diamond pickaxe).
+        // When the tier cap is set, path clearing only uses tools within the cap (for blocks that
+        // need a pickaxe, only pickaxes within the cap, or above the block's minimum tier as a
+        // backdoor). If no eligible tool can be found at all, selection returns -1 and path
+        // clearing stops instead of falling back to better tools. With the cap disabled (-1) the
+        // original behavior is kept exactly.
         int minTier = this.maxTier >= 0 ? getMinTierForBlock(b) : 0;
         int best;
         boolean backdoor = false;
-        boolean fellBack = false;
-        if (this.maxTier >= 0 && minTier > this.maxTier) {
-            best = getBestSlotWithinTier(b, preferSilkTouch, 0, -1);
-            backdoor = true;
+        if (this.maxTier >= 0) {
+            int lo = minTier > this.maxTier ? minTier : 0;
+            int hi = minTier > this.maxTier ? -1 : this.maxTier;
+            backdoor = minTier > this.maxTier;
+            best = getBestSlotWithinTier(b, preferSilkTouch, lo, hi, requiresPickaxe(b));
+            if (best == -1 && pathingCalculation && Baritone.settings().allowInventory.value) {
+                // for cost estimation we can assume that the best in-tier tool in the main inventory
+                // will be moved to the hotbar, since execution will fetch it
+                best = getBestSlotWithinTier(b, preferSilkTouch, lo, hi, requiresPickaxe(b), 9, 36);
+            }
         } else {
-            best = getBestSlotWithinTier(b, preferSilkTouch, 0, this.maxTier);
-            if (best == -1 && this.maxTier >= 0) {
-                if (pathingCalculation && Baritone.settings().allowInventory.value) {
-                    // for cost estimation we can assume that the best in-tier tool in the main inventory
-                    // will be moved to the hotbar, since execution will fetch it
-                    best = getBestSlotWithinTier(b, preferSilkTouch, 0, this.maxTier, 9, 36);
-                }
-                if (best == -1) {
-                    // no tool within the tier limit could break this block, fall back to the
-                    // original unrestricted selection
-                    best = getBestSlotWithinTier(b, preferSilkTouch, 0, -1);
-                    fellBack = true;
-                }
+            best = getBestSlotWithinTier(b, preferSilkTouch, 0, -1);
+            if (best == -1) {
+                best = 0; // original behavior: default to slot 0 if nothing at all can be used
             }
         }
         if (best == -1) {
-            best = 0; // default to slot 0 if nothing at all can be used
+            logDebugDeduped("[ToolSet] " + b + " maxTier=" + this.maxTier
+                    + (minTier > 0 ? " minTier=" + minTier : "")
+                    + " -> stopped (no eligible tool available)");
+            return best;
         }
-        String extra = backdoor ? " (backdoor, block needs tier " + minTier + ")"
-                : fellBack ? " (fallback, no tool within tier)" : "";
+        String extra = backdoor ? " (backdoor, block needs tier " + minTier + ")" : "";
         ItemStack stack = player.getInventory().getItem(best);
         logDebugDeduped("[ToolSet] " + b + " maxTier=" + this.maxTier
                 + (minTier > 0 ? " minTier=" + minTier : "")
@@ -294,25 +306,33 @@ public class ToolSet {
     }
 
     public int getBestSlotWithinTier(Block b, boolean preferSilkTouch, int maxTier) {
-        return getBestSlotWithinTier(b, preferSilkTouch, 0, maxTier);
+        return getBestSlotWithinTier(b, preferSilkTouch, 0, maxTier, false);
     }
 
     public int getBestSlotWithinTier(Block b, boolean preferSilkTouch, int minTier, int maxTier) {
-        return getBestSlotWithinTier(b, preferSilkTouch, minTier, maxTier, 0, 9);
+        return getBestSlotWithinTier(b, preferSilkTouch, minTier, maxTier, false);
+    }
+
+    public int getBestSlotWithinTier(Block b, boolean preferSilkTouch, int minTier, int maxTier, boolean pickaxeOnly) {
+        return getBestSlotWithinTier(b, preferSilkTouch, minTier, maxTier, pickaxeOnly, 0, 9);
     }
 
     /**
      * The best tool within the tier limit in the main inventory (excluding the hotbar), or -1 if there is none
      */
     public int getBestBackpackSlotWithinTier(Block b, boolean preferSilkTouch, int maxTier) {
-        return getBestSlotWithinTier(b, preferSilkTouch, 0, maxTier, 9, 36);
+        return getBestBackpackSlotWithinTier(b, preferSilkTouch, 0, maxTier, false);
     }
 
     public int getBestBackpackSlotWithinTier(Block b, boolean preferSilkTouch, int minTier, int maxTier) {
-        return getBestSlotWithinTier(b, preferSilkTouch, minTier, maxTier, 9, 36);
+        return getBestBackpackSlotWithinTier(b, preferSilkTouch, minTier, maxTier, false);
     }
 
-    private int getBestSlotWithinTier(Block b, boolean preferSilkTouch, int minTier, int maxTier, int startIncl, int endExcl) {
+    public int getBestBackpackSlotWithinTier(Block b, boolean preferSilkTouch, int minTier, int maxTier, boolean pickaxeOnly) {
+        return getBestSlotWithinTier(b, preferSilkTouch, minTier, maxTier, pickaxeOnly, 9, 36);
+    }
+
+    private int getBestSlotWithinTier(Block b, boolean preferSilkTouch, int minTier, int maxTier, boolean pickaxeOnly, int startIncl, int endExcl) {
         int best = -1;
         double highestSpeed = Double.NEGATIVE_INFINITY;
         int lowestCost = Integer.MIN_VALUE;
@@ -329,6 +349,9 @@ public class ToolSet {
             }
             int tier = getMaterialCost(itemStack);
             if (tier < minTier || (maxTier >= 0 && tier > maxTier)) {
+                continue;
+            }
+            if (pickaxeOnly && !itemStack.isCorrectToolForDrops(blockState)) {
                 continue;
             }
             double speed = calculateSpeedVsBlock(itemStack, blockState);
@@ -359,7 +382,13 @@ public class ToolSet {
      * @return A double containing the destruction ticks with the best tool
      */
     private double getBestDestructionTime(Block b) {
-        ItemStack stack = player.getInventory().getItem(getBestSlot(b, false, true));
+        int slot = getBestSlot(b, false, true);
+        if (slot == -1) {
+            // no eligible tool remains (e.g. the in-cap pickaxe is exhausted), treat the block as
+            // unbreakable so that pathing stops mining it
+            return -1;
+        }
+        ItemStack stack = player.getInventory().getItem(slot);
         return calculateSpeedVsBlock(stack, b.defaultBlockState()) * avoidanceMultiplier(b);
     }
 
