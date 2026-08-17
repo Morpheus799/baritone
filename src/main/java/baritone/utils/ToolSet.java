@@ -97,6 +97,32 @@ public class ToolSet {
             Map.entry("minecraft:netherite_sword", 5), Map.entry("minecraft:netherite_shovel", 5), Map.entry("minecraft:netherite_pickaxe", 5), Map.entry("minecraft:netherite_axe", 5), Map.entry("minecraft:netherite_hoe", 5)
     );
 
+    /**
+     * The minimum tool tier required to break a block without losing its drops, hardcoded because
+     * modern versions don't expose this reliably. Only blocks requiring above wooden (0) need an
+     * entry. Used to prevent path clearing from wasting precious blocks with tools that are too weak.
+     */
+    private static final Map<String, Integer> MIN_TIER_BY_BLOCK = Map.ofEntries(
+            Map.entry("minecraft:iron_ore", 1), Map.entry("minecraft:deepslate_iron_ore", 1),
+            Map.entry("minecraft:copper_ore", 1), Map.entry("minecraft:deepslate_copper_ore", 1),
+            Map.entry("minecraft:lapis_ore", 1), Map.entry("minecraft:deepslate_lapis_ore", 1),
+            Map.entry("minecraft:diamond_ore", 2), Map.entry("minecraft:deepslate_diamond_ore", 2),
+            Map.entry("minecraft:gold_ore", 2), Map.entry("minecraft:deepslate_gold_ore", 2),
+            Map.entry("minecraft:emerald_ore", 2), Map.entry("minecraft:deepslate_emerald_ore", 2),
+            Map.entry("minecraft:redstone_ore", 2), Map.entry("minecraft:deepslate_redstone_ore", 2),
+            Map.entry("minecraft:ancient_debris", 4),
+            Map.entry("minecraft:obsidian", 4), Map.entry("minecraft:crying_obsidian", 4)
+    );
+
+    /**
+     * The minimum tool tier that should be used to break the given block without losing its drops.
+     * 0 means no special requirement (the {@code pathClearMaxToolTier} limit applies normally).
+     */
+    public static int getMinTierForBlock(Block b) {
+        Identifier key = BuiltInRegistries.BLOCK.getKey(b);
+        return key == null ? 0 : MIN_TIER_BY_BLOCK.getOrDefault(key.toString(), 0);
+    }
+
     private static String lastDebugLog;
 
     /**
@@ -202,42 +228,55 @@ public class ToolSet {
             return player.getInventory().getSelectedSlot();
         }
 
-        int best = getBestSlotWithinTier(b, preferSilkTouch, this.maxTier);
+        // special blocks (ores etc.) ignore the tier cap and only require at least their minimum
+        // tier, so that they are never broken with a tool too weak to drop anything
+        int minTier = this.maxTier >= 0 ? getMinTierForBlock(b) : 0;
+        int maxTier = minTier > 0 ? -1 : this.maxTier;
+        int best = getBestSlotWithinTier(b, preferSilkTouch, minTier, maxTier);
         boolean fellBack = false;
-        if (best == -1 && this.maxTier >= 0) {
+        if (best == -1 && this.maxTier >= 0 && minTier == 0) {
             if (pathingCalculation && Baritone.settings().allowInventory.value) {
                 // for cost estimation we can assume that the best in-tier tool in the main inventory
                 // will be moved to the hotbar, since execution will fetch it
-                best = getBestSlotWithinTier(b, preferSilkTouch, this.maxTier, 9, 36);
+                best = getBestSlotWithinTier(b, preferSilkTouch, 0, this.maxTier, 9, 36);
             }
             if (best == -1) {
                 // no tool within the tier limit could break this block, fall back to the original unrestricted selection
-                best = getBestSlotWithinTier(b, preferSilkTouch, -1);
+                best = getBestSlotWithinTier(b, preferSilkTouch, 0, -1);
                 fellBack = true;
             }
         }
-        if (best == -1) {
+        if (best == -1 && minTier == 0) {
             best = 0; // default to slot 0 if nothing at all can be used
         }
         ItemStack stack = player.getInventory().getItem(best);
         logDebugDeduped("[ToolSet] " + b + " maxTier=" + this.maxTier
+                + (minTier > 0 ? " minTier=" + minTier : "")
                 + (fellBack ? " (fallback, no tool within tier)" : "")
                 + " -> slot " + best + " (" + (stack.isEmpty() ? "hand" : stack.getItem()) + ", tier " + getMaterialCost(stack) + ")");
         return best;
     }
 
     public int getBestSlotWithinTier(Block b, boolean preferSilkTouch, int maxTier) {
-        return getBestSlotWithinTier(b, preferSilkTouch, maxTier, 0, 9);
+        return getBestSlotWithinTier(b, preferSilkTouch, 0, maxTier);
+    }
+
+    public int getBestSlotWithinTier(Block b, boolean preferSilkTouch, int minTier, int maxTier) {
+        return getBestSlotWithinTier(b, preferSilkTouch, minTier, maxTier, 0, 9);
     }
 
     /**
      * The best tool within the tier limit in the main inventory (excluding the hotbar), or -1 if there is none
      */
     public int getBestBackpackSlotWithinTier(Block b, boolean preferSilkTouch, int maxTier) {
-        return getBestSlotWithinTier(b, preferSilkTouch, maxTier, 9, 36);
+        return getBestSlotWithinTier(b, preferSilkTouch, 0, maxTier, 9, 36);
     }
 
-    private int getBestSlotWithinTier(Block b, boolean preferSilkTouch, int maxTier, int startIncl, int endExcl) {
+    public int getBestBackpackSlotWithinTier(Block b, boolean preferSilkTouch, int minTier, int maxTier) {
+        return getBestSlotWithinTier(b, preferSilkTouch, minTier, maxTier, 9, 36);
+    }
+
+    private int getBestSlotWithinTier(Block b, boolean preferSilkTouch, int minTier, int maxTier, int startIncl, int endExcl) {
         int best = -1;
         double highestSpeed = Double.NEGATIVE_INFINITY;
         int lowestCost = Integer.MIN_VALUE;
@@ -252,7 +291,8 @@ public class ToolSet {
             if (Baritone.settings().itemSaver.value && (itemStack.getDamageValue() + Baritone.settings().itemSaverThreshold.value) >= itemStack.getMaxDamage() && itemStack.getMaxDamage() > 1) {
                 continue;
             }
-            if (maxTier >= 0 && getMaterialCost(itemStack) > maxTier) {
+            int tier = getMaterialCost(itemStack);
+            if (tier < minTier || (maxTier >= 0 && tier > maxTier)) {
                 continue;
             }
             double speed = calculateSpeedVsBlock(itemStack, blockState);
@@ -283,7 +323,13 @@ public class ToolSet {
      * @return A double containing the destruction ticks with the best tool
      */
     private double getBestDestructionTime(Block b) {
-        ItemStack stack = player.getInventory().getItem(getBestSlot(b, false, true));
+        int slot = getBestSlot(b, false, true);
+        if (slot == -1) {
+            // breaking this block would need a tool tier that isn't available (e.g. an ore that
+            // requires iron or better), treat it as unbreakable so pathing avoids it instead of wasting it
+            return -1;
+        }
+        ItemStack stack = player.getInventory().getItem(slot);
         return calculateSpeedVsBlock(stack, b.defaultBlockState()) * avoidanceMultiplier(b);
     }
 
