@@ -81,6 +81,24 @@ public class ToolSet {
         ItemTags.NETHERITE_TOOL_MATERIALS
     );
 
+    private static String lastDebugLog;
+
+    /**
+     * Debug logging that only fires when the line changed since the last call, so that per-tick
+     * callers don't spam the chat. The line is also written to stdout, which ends up in the
+     * Minecraft log file (logs/latest.log).
+     */
+    public static void logDebugDeduped(String line) {
+        if (!Baritone.settings().chatDebug.value) {
+            return;
+        }
+        if (!line.equals(lastDebugLog)) {
+            lastDebugLog = line;
+            System.out.println(line);
+            Helper.HELPER.logDebug(line);
+        }
+    }
+
     public ToolSet(LocalPlayer player) {
         this(player, -1);
     }
@@ -175,12 +193,10 @@ public class ToolSet {
         if (best == -1) {
             best = 0; // default to slot 0 if nothing at all can be used
         }
-        if (Baritone.settings().chatDebug.value) {
-            ItemStack stack = player.getInventory().getItem(best);
-            Helper.HELPER.logDebug("[ToolSet] " + b + " maxTier=" + this.maxTier
-                    + (fellBack ? " (fallback, no tool within tier)" : "")
-                    + " -> slot " + best + " (" + (stack.isEmpty() ? "hand" : stack.getItem()) + ", tier " + getMaterialCost(stack) + ")");
-        }
+        ItemStack stack = player.getInventory().getItem(best);
+        logDebugDeduped("[ToolSet] " + b + " maxTier=" + this.maxTier
+                + (fellBack ? " (fallback, no tool within tier)" : "")
+                + " -> slot " + best + " (" + (stack.isEmpty() ? "hand" : stack.getItem()) + ", tier " + getMaterialCost(stack) + ")");
         return best;
     }
 
