@@ -253,33 +253,42 @@ public class ToolSet {
             return player.getInventory().getSelectedSlot();
         }
 
-        // special blocks (ores etc.) get a backdoor through the tier cap: if a tool meeting their
-        // minimum tier is available, it may be used. If not, selection falls back to the normal
-        // rules so that pathfinding behavior is unchanged.
+        // special blocks (ores etc.) only get a backdoor through the tier cap when the cap is below
+        // what the block needs to drop anything: in that case the original unrestricted selection
+        // is used. Otherwise the cap applies normally (e.g. gold ore with an iron cap is mined
+        // with the iron pickaxe, not the diamond pickaxe).
         int minTier = this.maxTier >= 0 ? getMinTierForBlock(b) : 0;
-        int maxTier = minTier > 0 ? -1 : this.maxTier;
-        int best = getBestSlotWithinTier(b, preferSilkTouch, minTier, maxTier);
+        int best;
+        boolean backdoor = false;
         boolean fellBack = false;
-        if (best == -1 && this.maxTier >= 0) {
-            if (pathingCalculation && Baritone.settings().allowInventory.value) {
-                // for cost estimation we can assume that the best in-tier tool in the main inventory
-                // will be moved to the hotbar, since execution will fetch it
-                best = getBestSlotWithinTier(b, preferSilkTouch, 0, this.maxTier, 9, 36);
-            }
-            if (best == -1) {
-                // no tool within the tier limit (or above the block's minimum tier) could break this
-                // block, fall back to the original unrestricted selection
-                best = getBestSlotWithinTier(b, preferSilkTouch, 0, -1);
-                fellBack = true;
+        if (this.maxTier >= 0 && minTier > this.maxTier) {
+            best = getBestSlotWithinTier(b, preferSilkTouch, 0, -1);
+            backdoor = true;
+        } else {
+            best = getBestSlotWithinTier(b, preferSilkTouch, 0, this.maxTier);
+            if (best == -1 && this.maxTier >= 0) {
+                if (pathingCalculation && Baritone.settings().allowInventory.value) {
+                    // for cost estimation we can assume that the best in-tier tool in the main inventory
+                    // will be moved to the hotbar, since execution will fetch it
+                    best = getBestSlotWithinTier(b, preferSilkTouch, 0, this.maxTier, 9, 36);
+                }
+                if (best == -1) {
+                    // no tool within the tier limit could break this block, fall back to the
+                    // original unrestricted selection
+                    best = getBestSlotWithinTier(b, preferSilkTouch, 0, -1);
+                    fellBack = true;
+                }
             }
         }
         if (best == -1) {
             best = 0; // default to slot 0 if nothing at all can be used
         }
+        String extra = backdoor ? " (backdoor, block needs tier " + minTier + ")"
+                : fellBack ? " (fallback, no tool within tier)" : "";
         ItemStack stack = player.getInventory().getItem(best);
         logDebugDeduped("[ToolSet] " + b + " maxTier=" + this.maxTier
                 + (minTier > 0 ? " minTier=" + minTier : "")
-                + (fellBack ? " (fallback, no tool within tier)" : "")
+                + extra
                 + " -> slot " + best + " (" + (stack.isEmpty() ? "hand" : stack.getItem()) + ", tier " + getMaterialCost(stack) + ")");
         return best;
     }

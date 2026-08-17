@@ -688,25 +688,31 @@ public interface MovementHelper extends ActionCosts, Helper {
         String extra = "";
         int slot;
         if (maxTier >= 0) {
-            ToolSet ts = new ToolSet(ctx.player(), maxTier);
-            // special blocks (ores etc.) ignore the tier cap and only require at least their minimum tier
-            slot = ts.getBestSlotWithinTier(b.getBlock(), preferSilkTouch, minTier, minTier > 0 ? -1 : maxTier);
-            if (slot == -1 && Baritone.settings().allowInventory.value) {
-                // no eligible tool on the hotbar, try to fetch one from the main inventory
-                int backpack = ts.getBestBackpackSlotWithinTier(b.getBlock(), preferSilkTouch, minTier, minTier > 0 ? -1 : maxTier);
-                if (backpack != -1 && baritone != null) {
-                    int dest = baritone.getInventoryBehavior().attemptToBringToHotbar(backpack);
-                    if (dest != -1) {
-                        slot = dest;
-                        extra = " (fetched from backpack slot " + backpack + ")";
-                    } else {
-                        extra = " (waiting to fetch from backpack slot " + backpack + ")";
+            if (minTier > maxTier) {
+                // the tier limit is below what the block needs to drop anything, use the original
+                // unrestricted selection (backdoor) instead of wasting the block
+                slot = new ToolSet(ctx.player(), -1).getBestSlot(b.getBlock(), preferSilkTouch);
+                extra = " (backdoor, block needs tier " + minTier + ")";
+            } else {
+                ToolSet ts = new ToolSet(ctx.player(), maxTier);
+                slot = ts.getBestSlotWithinTier(b.getBlock(), preferSilkTouch, maxTier);
+                if (slot == -1 && Baritone.settings().allowInventory.value) {
+                    // no in-tier tool on the hotbar, try to fetch one from the main inventory
+                    int backpack = ts.getBestBackpackSlotWithinTier(b.getBlock(), preferSilkTouch, maxTier);
+                    if (backpack != -1 && baritone != null) {
+                        int dest = baritone.getInventoryBehavior().attemptToBringToHotbar(backpack);
+                        if (dest != -1) {
+                            slot = dest;
+                            extra = " (fetched from backpack slot " + backpack + ")";
+                        } else {
+                            extra = " (waiting to fetch from backpack slot " + backpack + ")";
+                        }
                     }
                 }
-            }
-            if (slot == -1) {
-                extra = " (fallback, no tool meeting the requirement)";
-                slot = new ToolSet(ctx.player(), -1).getBestSlot(b.getBlock(), preferSilkTouch);
+                if (slot == -1) {
+                    extra = " (fallback, no tool within tier)";
+                    slot = new ToolSet(ctx.player(), -1).getBestSlot(b.getBlock(), preferSilkTouch);
+                }
             }
         } else {
             slot = new ToolSet(ctx.player(), -1).getBestSlot(b.getBlock(), preferSilkTouch);
