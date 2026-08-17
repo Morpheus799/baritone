@@ -713,7 +713,7 @@ public interface MovementHelper extends ActionCosts, Helper {
         }
         if (slot == -1) {
             // no tool that can break this block without losing its drops, leave the selection alone
-            Helper.HELPER.logDebug("[PathClear] " + b + " requires tool tier " + minTier + " or better, none available, refusing to break");
+            ToolSet.logDebugDeduped("[PathClear] " + b + " requires tool tier " + minTier + " or better, none available, refusing to break");
             return;
         }
         ctx.player().getInventory().setSelectedSlot(slot);
