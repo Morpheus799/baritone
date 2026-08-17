@@ -58,7 +58,14 @@ public class Baritone implements IBaritone {
     private static final ThreadPoolExecutor threadPool;
 
     static {
-        threadPool = new ThreadPoolExecutor(4, Integer.MAX_VALUE, 60L, TimeUnit.SECONDS, new SynchronousQueue<>());
+        // use daemon threads so that the eternal cache threads (chunk packing and the periodic
+        // world save) don't keep the JVM alive on shutdown, which would trigger MC's
+        // ClientShutdownWatchdog crash report on exit
+        threadPool = new ThreadPoolExecutor(4, Integer.MAX_VALUE, 60L, TimeUnit.SECONDS, new SynchronousQueue<>(), r -> {
+            Thread thread = new Thread(r, "Baritone Worker");
+            thread.setDaemon(true);
+            return thread;
+        });
     }
 
     private final Minecraft mc;
