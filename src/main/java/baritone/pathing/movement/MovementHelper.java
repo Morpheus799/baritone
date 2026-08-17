@@ -704,22 +704,18 @@ public interface MovementHelper extends ActionCosts, Helper {
                     }
                 }
             }
-            if (slot == -1 && minTier == 0) {
-                extra = " (fallback, no tool within tier)";
+            if (slot == -1) {
+                extra = " (fallback, no tool meeting the requirement)";
                 slot = new ToolSet(ctx.player(), -1).getBestSlot(b.getBlock(), preferSilkTouch);
             }
         } else {
             slot = new ToolSet(ctx.player(), -1).getBestSlot(b.getBlock(), preferSilkTouch);
         }
-        if (slot == -1) {
-            // no tool that can break this block without losing its drops, leave the selection alone
-            ToolSet.logDebugDeduped("[PathClear] " + b + " requires tool tier " + minTier + " or better, none available, refusing to break");
-            return;
-        }
         ctx.player().getInventory().setSelectedSlot(slot);
         ItemStack stack = ctx.player().getInventory().getItem(slot);
-        ToolSet.logDebugDeduped("[PathClear] " + b + " maxTier=" + maxTier + " -> slot " + slot
-                + " (" + (stack.isEmpty() ? "hand" : stack.getItem()) + ")" + extra);
+        ToolSet.logDebugDeduped("[PathClear] " + b + " maxTier=" + maxTier
+                + (minTier > 0 ? " minTier=" + minTier : "")
+                + " -> slot " + slot + " (" + (stack.isEmpty() ? "hand" : stack.getItem()) + ")" + extra);
     }
 
     static void moveTowards(IPlayerContext ctx, MovementState state, BlockPos pos) {
