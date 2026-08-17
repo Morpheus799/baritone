@@ -692,8 +692,7 @@ public interface MovementHelper extends ActionCosts, Helper {
             if (slot == -1 && Baritone.settings().allowInventory.value) {
                 // no in-tier tool on the hotbar, try to fetch one from the main inventory
                 int backpack = ts.getBestBackpackSlotWithinTier(b.getBlock(), preferSilkTouch, maxTier);
-                if (backpack != -1) {
-                    Baritone baritone = (Baritone) BaritoneAPI.getProvider().getBaritoneForPlayer(ctx.player());
+                if (backpack != -1 && baritone != null) {
                     int dest = baritone.getInventoryBehavior().attemptToBringToHotbar(backpack);
                     if (dest != -1) {
                         slot = dest;
