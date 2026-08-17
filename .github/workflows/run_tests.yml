@@ -12,15 +12,29 @@ jobs:
 
     steps:
     - uses: actions/checkout@v6
+
+    # Prefer the JDK 25 that is preinstalled on the runner image to avoid downloading one
     - name: Set up JDK 25
+      id: jdk
+      run: |
+        if [ -n "$JAVA_HOME_25_X64" ]; then
+          echo "Using preinstalled JDK 25: $JAVA_HOME_25_X64"
+          echo "JAVA_HOME=$JAVA_HOME_25_X64" >> "$GITHUB_ENV"
+          echo "found=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "JDK 25 is not preinstalled on this runner"
+          echo "found=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Install JDK 25 (fallback)
+      if: steps.jdk.outputs.found == 'false'
       uses: actions/setup-java@v5
       with:
         java-version: '25'
         distribution: 'zulu'
-        
+
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
-      
+
     - name: Executing tests
       run: ./gradlew test
-
