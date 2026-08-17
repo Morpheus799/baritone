@@ -17,19 +17,19 @@ jobs:
       with:
         fetch-depth: 0
 
-    # Prefer the JDK 25 that is preinstalled on the runner image to avoid downloading one
+    # Prefer the JDK 25 that is preinstalled on the runner image to avoid downloading one.
+    # Proguard requires a full JDK with jmods, so verify that the preinstalled JDK is complete.
     - name: Set up JDK 25
       id: jdk
       run: |
         echo "Available preinstalled JDKs:"
         ls /usr/lib/jvm || true
-        ls /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk 2>/dev/null || true
-        if [ -n "$JAVA_HOME_25_X64" ]; then
+        if [ -n "$JAVA_HOME_25_X64" ] && [ -f "$JAVA_HOME_25_X64/jmods/java.base.jmod" ]; then
           echo "Using preinstalled JDK 25: $JAVA_HOME_25_X64"
           echo "JAVA_HOME=$JAVA_HOME_25_X64" >> "$GITHUB_ENV"
           echo "found=true" >> "$GITHUB_OUTPUT"
         else
-          echo "JDK 25 is not preinstalled on this runner"
+          echo "Preinstalled JDK 25 is missing or incomplete (no jmods), falling back"
           echo "found=false" >> "$GITHUB_OUTPUT"
         fi
 
@@ -44,7 +44,7 @@ jobs:
       run: chmod +x gradlew
 
     - name: Build with Gradle
-      run: ./gradlew build -Pmod_version="$(git describe --always --tags --first-parent | cut -c2-)"
+      run: ./gradlew build -Pmod_version="$(git describe --always --tags --first-parent | cut -c2-)" -Dorg.gradle.java.installations.auto-detect=false -Dorg.gradle.java.installations.paths="$JAVA_HOME"
 
     - name: Archive Artifacts
       uses: actions/upload-artifact@v7

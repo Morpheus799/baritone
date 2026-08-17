@@ -17,12 +17,12 @@ jobs:
     - name: Set up JDK 25
       id: jdk
       run: |
-        if [ -n "$JAVA_HOME_25_X64" ]; then
+        if [ -n "$JAVA_HOME_25_X64" ] && [ -f "$JAVA_HOME_25_X64/jmods/java.base.jmod" ]; then
           echo "Using preinstalled JDK 25: $JAVA_HOME_25_X64"
           echo "JAVA_HOME=$JAVA_HOME_25_X64" >> "$GITHUB_ENV"
           echo "found=true" >> "$GITHUB_OUTPUT"
         else
-          echo "JDK 25 is not preinstalled on this runner"
+          echo "Preinstalled JDK 25 is missing or incomplete (no jmods), falling back"
           echo "found=false" >> "$GITHUB_OUTPUT"
         fi
 
@@ -37,4 +37,4 @@ jobs:
       run: chmod +x gradlew
 
     - name: Executing tests
-      run: ./gradlew test
+      run: ./gradlew test -Dorg.gradle.java.installations.auto-detect=false -Dorg.gradle.java.installations.paths="$JAVA_HOME"
