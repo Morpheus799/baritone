@@ -675,6 +675,13 @@ public interface MovementHelper extends ActionCosts, Helper {
         if (!Baritone.settings().autoTool.value || Baritone.settings().assumeExternalAutoTool.value) {
             return;
         }
+        Baritone baritone = (Baritone) BaritoneAPI.getProvider().getBaritoneForPlayer(ctx.player());
+        if (baritone != null && baritone.getMineProcess().isTargetBlock(b)) {
+            // target blocks (e.g. #mine ores) always use the original unrestricted tool selection,
+            // even when a movement breaks them as part of path clearing
+            switchToBestToolFor(ctx, b);
+            return;
+        }
         int maxTier = BaritoneAPI.getSettings().pathClearMaxToolTier.value;
         boolean preferSilkTouch = BaritoneAPI.getSettings().preferSilkTouch.value;
         String extra = "";

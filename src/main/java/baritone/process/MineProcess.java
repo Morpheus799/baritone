@@ -519,6 +519,18 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
         }
     }
 
+    /**
+     * Whether the given block is a current mining target. Target blocks always use the unrestricted
+     * tool selection, even when they are broken as part of a movement's path clearing.
+     *
+     * @param state The block state to check
+     * @return Whether it is a target of this process
+     */
+    public boolean isTargetBlock(BlockState state) {
+        BlockOptionalMetaLookup filter = filterFilter();
+        return filter != null && filter.has(state);
+    }
+
     private BlockOptionalMetaLookup filterFilter() {
         if (this.filter == null) {
             return null;
