@@ -683,15 +683,17 @@ public interface MovementHelper extends ActionCosts, Helper {
             return;
         }
         int maxTier = BaritoneAPI.getSettings().pathClearMaxToolTier.value;
+        int minTier = ToolSet.getMinTierForBlock(b.getBlock());
         boolean preferSilkTouch = BaritoneAPI.getSettings().preferSilkTouch.value;
         String extra = "";
         int slot;
         if (maxTier >= 0) {
             ToolSet ts = new ToolSet(ctx.player(), maxTier);
-            slot = ts.getBestSlotWithinTier(b.getBlock(), preferSilkTouch, maxTier);
+            // special blocks (ores etc.) ignore the tier cap and only require at least their minimum tier
+            slot = ts.getBestSlotWithinTier(b.getBlock(), preferSilkTouch, minTier, minTier > 0 ? -1 : maxTier);
             if (slot == -1 && Baritone.settings().allowInventory.value) {
-                // no in-tier tool on the hotbar, try to fetch one from the main inventory
-                int backpack = ts.getBestBackpackSlotWithinTier(b.getBlock(), preferSilkTouch, maxTier);
+                // no eligible tool on the hotbar, try to fetch one from the main inventory
+                int backpack = ts.getBestBackpackSlotWithinTier(b.getBlock(), preferSilkTouch, minTier, minTier > 0 ? -1 : maxTier);
                 if (backpack != -1 && baritone != null) {
                     int dest = baritone.getInventoryBehavior().attemptToBringToHotbar(backpack);
                     if (dest != -1) {
@@ -702,12 +704,17 @@ public interface MovementHelper extends ActionCosts, Helper {
                     }
                 }
             }
-            if (slot == -1) {
+            if (slot == -1 && minTier == 0) {
                 extra = " (fallback, no tool within tier)";
                 slot = new ToolSet(ctx.player(), -1).getBestSlot(b.getBlock(), preferSilkTouch);
             }
         } else {
             slot = new ToolSet(ctx.player(), -1).getBestSlot(b.getBlock(), preferSilkTouch);
+        }
+        if (slot == -1) {
+            // no tool that can break this block without losing its drops, leave the selection alone
+            Helper.HELPER.logDebug("[PathClear] " + b + " requires tool tier " + minTier + " or better, none available, refusing to break");
+            return;
         }
         ctx.player().getInventory().setSelectedSlot(slot);
         ItemStack stack = ctx.player().getInventory().getItem(slot);
