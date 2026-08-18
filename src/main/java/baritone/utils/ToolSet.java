@@ -143,6 +143,24 @@ public class ToolSet {
         return PICKAXE_REFERENCE.isCorrectToolForDrops(b.defaultBlockState());
     }
 
+    /**
+     * The effective tier bounds used for path clearing a block under the tier cap. Computed in one
+     * place so that the cost calculation and the execution side always agree.
+     *
+     * @param minTier  The block's hardcoded minimum tier to drop anything, 0 if it has none
+     * @param lo       The lowest allowed tier
+     * @param hi       The highest allowed tier, -1 for no upper bound
+     * @param backdoor Whether the block's minimum requirement exceeds the cap, which lifts the
+     *                 upper bound so that the block is never broken with a tool too weak to drop it
+     */
+    public record SelectionBounds(int minTier, int lo, int hi, boolean backdoor) {}
+
+    public static SelectionBounds pathClearBounds(Block b, int maxTier) {
+        int minTier = maxTier >= 0 ? getMinTierForBlock(b) : 0;
+        boolean backdoor = maxTier >= 0 && minTier > maxTier;
+        return new SelectionBounds(minTier, backdoor ? minTier : 0, backdoor ? -1 : maxTier, backdoor);
+    }
+
     private static final Map<String, String> lastDebugLogByContext = new HashMap<>();
 
     /**
@@ -271,18 +289,14 @@ public class ToolSet {
         // backdoor). If no eligible tool can be found at all, selection returns -1 and path
         // clearing stops instead of falling back to better tools. With the cap disabled (-1) the
         // original behavior is kept exactly.
-        int minTier = this.maxTier >= 0 ? getMinTierForBlock(b) : 0;
+        SelectionBounds bounds = pathClearBounds(b, this.maxTier);
         int best;
-        boolean backdoor = false;
         if (this.maxTier >= 0) {
-            int lo = minTier > this.maxTier ? minTier : 0;
-            int hi = minTier > this.maxTier ? -1 : this.maxTier;
-            backdoor = minTier > this.maxTier;
-            best = getBestSlotWithinTier(b, preferSilkTouch, lo, hi, requiresPickaxe(b));
+            best = getBestSlotWithinTier(b, preferSilkTouch, bounds.lo(), bounds.hi(), requiresPickaxe(b));
             if (best == -1 && pathingCalculation && Baritone.settings().allowInventory.value) {
                 // for cost estimation we can assume that the best in-tier tool in the main inventory
                 // will be moved to the hotbar, since execution will fetch it
-                best = getBestSlotWithinTier(b, preferSilkTouch, lo, hi, requiresPickaxe(b), 9, 36);
+                best = getBestSlotWithinTier(b, preferSilkTouch, bounds.lo(), bounds.hi(), requiresPickaxe(b), 9, 36);
             }
         } else {
             best = getBestSlotWithinTier(b, preferSilkTouch, 0, -1);
@@ -292,11 +306,11 @@ public class ToolSet {
         }
         if (best == -1) {
             logDebugDeduped("[ToolSet] " + b + " maxTier=" + this.maxTier
-                    + (minTier > 0 ? " minTier=" + minTier : "")
+                    + (bounds.minTier() > 0 ? " minTier=" + bounds.minTier() : "")
                     + " -> stopped (no eligible tool available)");
             return best;
         }
-        String extra = backdoor ? " (backdoor, block needs tier " + minTier + ")" : "";
+        String extra = bounds.backdoor() ? " (backdoor, block needs tier " + bounds.minTier() + ")" : "";
         ItemStack stack = player.getInventory().getItem(best);
         logDebugDeduped("[ToolSet] " + b + " maxTier=" + this.maxTier
                 + (minTier > 0 ? " minTier=" + minTier : "")
