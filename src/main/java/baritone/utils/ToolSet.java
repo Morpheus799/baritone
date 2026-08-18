@@ -165,12 +165,15 @@ public class ToolSet {
 
     /**
      * Debug logging that only fires when the line changed for its context (everything before the
-     * arrow), so that per-tick callers don't spam. The line is always appended to the
-     * logs/baritone.log file, and is additionally printed to chat when chatDebug is enabled.
+     * arrow), so that per-tick callers don't spam. The two outputs are gated independently: the
+     * line is appended to logs/baritone.log while the tier cap is active, and printed to chat
+     * when chatDebug is enabled.
      */
     public static void logDebugDeduped(String line) {
-        if (Baritone.settings().pathClearMaxToolTier.value < 0 && !Baritone.settings().chatDebug.value) {
-            return; // keep the default setup completely quiet: no log file and no chat output
+        boolean toChat = Baritone.settings().chatDebug.value;
+        boolean toFile = Baritone.settings().pathClearMaxToolTier.value >= 0;
+        if (!toChat && !toFile) {
+            return; // keep the default setup completely quiet
         }
         int arrow = line.indexOf(" -> ");
         String context = arrow == -1 ? line : line.substring(0, arrow);
@@ -183,8 +186,10 @@ public class ToolSet {
             }
             lastDebugLogByContext.put(context, line);
         }
-        appendToLogFile(line);
-        if (Baritone.settings().chatDebug.value) {
+        if (toFile) {
+            appendToLogFile(line);
+        }
+        if (toChat) {
             Helper.HELPER.logDebug(line);
         }
     }
