@@ -335,7 +335,7 @@ public class ToolSet {
         String extra = bounds.backdoor() ? " (backdoor, block needs tier " + bounds.minTier() + ")" : "";
         ItemStack stack = player.getInventory().getItem(best);
         logDebugDeduped("[ToolSet] " + b + " maxTier=" + this.maxTier
-                + (minTier > 0 ? " minTier=" + minTier : "")
+                + (bounds.minTier() > 0 ? " minTier=" + bounds.minTier() : "")
                 + extra
                 + " -> slot " + best + " (" + (stack.isEmpty() ? "hand" : stack.getItem()) + ", tier " + getMaterialCost(stack) + ")");
         return best;
