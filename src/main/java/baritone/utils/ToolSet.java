@@ -169,6 +169,9 @@ public class ToolSet {
      * logs/baritone.log file, and is additionally printed to chat when chatDebug is enabled.
      */
     public static void logDebugDeduped(String line) {
+        if (Baritone.settings().pathClearMaxToolTier.value < 0 && !Baritone.settings().chatDebug.value) {
+            return; // keep the default setup completely quiet: no log file and no chat output
+        }
         int arrow = line.indexOf(" -> ");
         String context = arrow == -1 ? line : line.substring(0, arrow);
         synchronized (lastDebugLogByContext) {
