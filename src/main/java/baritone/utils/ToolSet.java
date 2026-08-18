@@ -161,6 +161,20 @@ public class ToolSet {
         return new SelectionBounds(minTier, backdoor ? minTier : 0, backdoor ? -1 : maxTier, backdoor);
     }
 
+    // the last requested backpack fetch that hasn't executed yet, remembered so that the waiting
+    // loop doesn't rescan the inventory every tick
+    private static Block pendingFetchBlock;
+    private static int pendingFetchSlot = -1;
+
+    public static int getPendingFetchSlot(Block b) {
+        return pendingFetchBlock == b ? pendingFetchSlot : -1;
+    }
+
+    public static void setPendingFetch(Block b, int slot) {
+        pendingFetchBlock = b;
+        pendingFetchSlot = slot;
+    }
+
     private static final Map<String, String> lastDebugLogByContext = new HashMap<>();
 
     /**
@@ -327,10 +341,6 @@ public class ToolSet {
         return best;
     }
 
-    public int getBestSlotWithinTier(Block b, boolean preferSilkTouch, int maxTier) {
-        return getBestSlotWithinTier(b, preferSilkTouch, 0, maxTier, false);
-    }
-
     public int getBestSlotWithinTier(Block b, boolean preferSilkTouch, int minTier, int maxTier) {
         return getBestSlotWithinTier(b, preferSilkTouch, minTier, maxTier, false);
     }
@@ -344,10 +354,6 @@ public class ToolSet {
      */
     public int getBestBackpackSlotWithinTier(Block b, boolean preferSilkTouch, int maxTier) {
         return getBestBackpackSlotWithinTier(b, preferSilkTouch, 0, maxTier, false);
-    }
-
-    public int getBestBackpackSlotWithinTier(Block b, boolean preferSilkTouch, int minTier, int maxTier) {
-        return getBestBackpackSlotWithinTier(b, preferSilkTouch, minTier, maxTier, false);
     }
 
     public int getBestBackpackSlotWithinTier(Block b, boolean preferSilkTouch, int minTier, int maxTier, boolean pickaxeOnly) {

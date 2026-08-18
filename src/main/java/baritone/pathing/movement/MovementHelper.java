@@ -652,10 +652,11 @@ public interface MovementHelper extends ActionCosts, Helper {
             return;
         }
         boolean preferSilkTouch = BaritoneAPI.getSettings().preferSilkTouch.value;
-        int slot = new ToolSet(ctx.player()).getBestSlot(b.getBlock(), preferSilkTouch);
+        ToolSet ts = new ToolSet(ctx.player());
+        int slot = ts.getBestSlot(b.getBlock(), preferSilkTouch);
         if (Baritone.settings().allowInventory.value) {
             // target block mining: also consider the main inventory and fetch a strictly better tool
-            int backpack = new ToolSet(ctx.player()).getBestBackpackSlotWithinTier(b.getBlock(), preferSilkTouch, -1);
+            int backpack = ts.getBestBackpackSlotWithinTier(b.getBlock(), preferSilkTouch, -1);
             if (backpack != -1) {
                 ItemStack hotbarStack = ctx.player().getInventory().getItem(slot);
                 ItemStack backpackStack = ctx.player().getInventory().getItem(backpack);
@@ -710,33 +711,41 @@ public interface MovementHelper extends ActionCosts, Helper {
         int maxTier = BaritoneAPI.getSettings().pathClearMaxToolTier.value;
         ToolSet.SelectionBounds bounds = ToolSet.pathClearBounds(b.getBlock(), maxTier);
         boolean preferSilkTouch = BaritoneAPI.getSettings().preferSilkTouch.value;
+        String logPrefix = "[PathClear] " + b + " maxTier=" + maxTier
+                + (bounds.minTier() > 0 ? " minTier=" + bounds.minTier() : "");
         String extra = "";
         int slot = -1;
         if (maxTier >= 0) {
             ToolSet ts = new ToolSet(ctx.player(), maxTier);
             slot = ts.getBestSlotWithinTier(b.getBlock(), preferSilkTouch, bounds.lo(), bounds.hi(), ToolSet.requiresPickaxe(b.getBlock()));
-            if (slot == -1 && Baritone.settings().allowInventory.value) {
-                // no eligible tool on the hotbar, try to fetch one from the main inventory
-                int backpack = ts.getBestBackpackSlotWithinTier(b.getBlock(), preferSilkTouch, bounds.lo(), bounds.hi(), ToolSet.requiresPickaxe(b.getBlock()));
+            if (slot != -1) {
+                ToolSet.setPendingFetch(null, -1); // the hotbar has an eligible tool, no fetch needed
+            } else if (Baritone.settings().allowInventory.value) {
+                // no eligible tool on the hotbar, fetch one from the main inventory. Remember the
+                // requested slot so the waiting loop doesn't rescan the inventory every tick.
+                int backpack = ToolSet.getPendingFetchSlot(b.getBlock());
+                if (backpack == -1) {
+                    backpack = ts.getBestBackpackSlotWithinTier(b.getBlock(), preferSilkTouch, bounds.lo(), bounds.hi(), ToolSet.requiresPickaxe(b.getBlock()));
+                    if (backpack != -1) {
+                        ToolSet.setPendingFetch(b.getBlock(), backpack);
+                    }
+                }
                 if (backpack != -1 && baritone != null) {
                     int dest = baritone.getInventoryBehavior().attemptToBringToHotbar(backpack);
                     if (dest != -1) {
                         slot = dest;
+                        ToolSet.setPendingFetch(null, -1);
                         extra = " (fetched from backpack slot " + backpack + ")";
                     } else {
                         // the move is pending, wait for the next tick instead of stopping
-                        ToolSet.logDebugDeduped("[PathClear] " + b + " maxTier=" + maxTier
-                                + (bounds.minTier() > 0 ? " minTier=" + bounds.minTier() : "")
-                                + " -> waiting to fetch from backpack slot " + backpack);
+                        ToolSet.logDebugDeduped(logPrefix + " -> waiting to fetch from backpack slot " + backpack);
                         return true;
                     }
                 }
             }
             if (slot == -1) {
                 // no eligible tool remains, stop mining instead of falling back to better tools
-                ToolSet.logDebugDeduped("[PathClear] " + b + " maxTier=" + maxTier
-                        + (bounds.minTier() > 0 ? " minTier=" + bounds.minTier() : "")
-                        + " -> stopped (no eligible tool available)");
+                ToolSet.logDebugDeduped(logPrefix + " -> stopped (no eligible tool available)");
                 return false;
             }
         } else {
@@ -744,9 +753,7 @@ public interface MovementHelper extends ActionCosts, Helper {
         }
         ctx.player().getInventory().setSelectedSlot(slot);
         ItemStack stack = ctx.player().getInventory().getItem(slot);
-        ToolSet.logDebugDeduped("[PathClear] " + b + " maxTier=" + maxTier
-                + (bounds.minTier() > 0 ? " minTier=" + bounds.minTier() : "")
-                + " -> slot " + slot + " (" + (stack.isEmpty() ? "hand" : stack.getItem()) + ")" + extra);
+        ToolSet.logDebugDeduped(logPrefix + " -> slot " + slot + " (" + (stack.isEmpty() ? "hand" : stack.getItem()) + ")" + extra);
         return true;
     }
 
