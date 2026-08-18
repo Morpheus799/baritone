@@ -64,6 +64,20 @@ public class MixinMinecraft {
     }
 
     @Inject(
+            method = "stop",
+            at = @At("HEAD")
+    )
+    private void preStop(CallbackInfo ci) {
+        // Save the cached world synchronously before the JVM exits: the executor threads are
+        // daemons, so the async save queued by closeWorld would otherwise be cut off mid-write.
+        for (IBaritone baritone : BaritoneAPI.getProvider().getAllBaritones()) {
+            if (baritone.getPlayerContext().world() != null && baritone.getWorldProvider().getCurrentWorld() != null) {
+                baritone.getWorldProvider().getCurrentWorld().getCachedWorld().save();
+            }
+        }
+    }
+
+    @Inject(
             method = "tick",
             at = @At(
                     value = "FIELD",
