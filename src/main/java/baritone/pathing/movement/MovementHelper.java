@@ -648,7 +648,29 @@ public interface MovementHelper extends ActionCosts, Helper {
      * @param b   the blockstate to mine
      */
     static void switchToBestToolFor(IPlayerContext ctx, BlockState b) {
-        switchToBestToolFor(ctx, b, new ToolSet(ctx.player()), BaritoneAPI.getSettings().preferSilkTouch.value);
+        if (!Baritone.settings().autoTool.value || Baritone.settings().assumeExternalAutoTool.value) {
+            return;
+        }
+        boolean preferSilkTouch = BaritoneAPI.getSettings().preferSilkTouch.value;
+        int slot = new ToolSet(ctx.player()).getBestSlot(b.getBlock(), preferSilkTouch);
+        if (Baritone.settings().allowInventory.value) {
+            // target block mining: also consider the main inventory and fetch a strictly better tool
+            int backpack = new ToolSet(ctx.player()).getBestBackpackSlotWithinTier(b.getBlock(), preferSilkTouch, -1);
+            if (backpack != -1) {
+                ItemStack hotbarStack = ctx.player().getInventory().getItem(slot);
+                ItemStack backpackStack = ctx.player().getInventory().getItem(backpack);
+                if (ToolSet.calculateSpeedVsBlock(backpackStack, b) > ToolSet.calculateSpeedVsBlock(hotbarStack, b)) {
+                    Baritone baritone = (Baritone) BaritoneAPI.getProvider().getBaritoneForPlayer(ctx.player());
+                    if (baritone != null) {
+                        int dest = baritone.getInventoryBehavior().attemptToBringToHotbar(backpack);
+                        if (dest != -1) {
+                            slot = dest;
+                        }
+                    }
+                }
+            }
+        }
+        ctx.player().getInventory().setSelectedSlot(slot);
     }
 
     /**
@@ -658,12 +680,6 @@ public interface MovementHelper extends ActionCosts, Helper {
      * @param b   the blockstate to mine
      * @param ts  previously calculated ToolSet
      */
-    static void switchToBestToolFor(IPlayerContext ctx, BlockState b, ToolSet ts, boolean preferSilkTouch) {
-        if (Baritone.settings().autoTool.value && !Baritone.settings().assumeExternalAutoTool.value) {
-            ctx.player().getInventory().setSelectedSlot(ts.getBestSlot(b.getBlock(), preferSilkTouch));
-        }
-    }
-
     /**
      * AutoTool for a specific block that is obstructing a movement ("path clearing"), respecting
      * {@link baritone.api.Settings#pathClearMaxToolTier}
