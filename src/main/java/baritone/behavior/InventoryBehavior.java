@@ -166,9 +166,6 @@ public final class InventoryBehavior extends Behavior implements Helper {
             if (Baritone.settings().itemSaver.value && (stack.getDamageValue() + Baritone.settings().itemSaverThreshold.value) >= stack.getMaxDamage() && stack.getMaxDamage() > 1) {
                 continue;
             }
-            if (Baritone.settings().pathClearMaxToolTier.value >= 0 && ToolSet.getMaterialCost(stack) > Baritone.settings().pathClearMaxToolTier.value) {
-                continue;
-            }
             if (stack.getItem().components().has(DataComponents.TOOL)) {
                 double speed = ToolSet.calculateSpeedVsBlock(stack, against.defaultBlockState()); // takes into account enchants
                 if (speed > bestSpeed) {

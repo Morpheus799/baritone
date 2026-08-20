@@ -31,7 +31,6 @@ import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.EnchantmentEffectComponents;
 import net.minecraft.world.item.enchantment.Enchantments;
@@ -72,12 +71,6 @@ public class ToolSet {
     private final LocalPlayer player;
 
     /**
-     * The maximum tool material tier to consider when selecting a tool.
-     * Matches the indices of {@link #materialTagsPriorityList}. -1 means no limit.
-     */
-    private final int maxTier;
-
-    /**
      * Used for evaluating the material cost of a tool.
      * see {@link #getMaterialCost(ItemStack)}
      * Prefer tools with lower material cost (lower index in this list).
@@ -104,76 +97,6 @@ public class ToolSet {
             Map.entry("minecraft:diamond_sword", 4), Map.entry("minecraft:diamond_shovel", 4), Map.entry("minecraft:diamond_pickaxe", 4), Map.entry("minecraft:diamond_axe", 4), Map.entry("minecraft:diamond_hoe", 4),
             Map.entry("minecraft:netherite_sword", 5), Map.entry("minecraft:netherite_shovel", 5), Map.entry("minecraft:netherite_pickaxe", 5), Map.entry("minecraft:netherite_axe", 5), Map.entry("minecraft:netherite_hoe", 5)
     );
-
-    /**
-     * The minimum tool tier required to break a block without losing its drops, hardcoded because
-     * modern versions don't expose this reliably. Only blocks requiring above wooden (0) need an
-     * entry. Used to prevent path clearing from wasting precious blocks with tools that are too weak.
-     */
-    private static final Map<String, Integer> MIN_TIER_BY_BLOCK = Map.ofEntries(
-            Map.entry("minecraft:iron_ore", 1), Map.entry("minecraft:deepslate_iron_ore", 1),
-            Map.entry("minecraft:copper_ore", 1), Map.entry("minecraft:deepslate_copper_ore", 1),
-            Map.entry("minecraft:lapis_ore", 1), Map.entry("minecraft:deepslate_lapis_ore", 1),
-            Map.entry("minecraft:diamond_ore", 2), Map.entry("minecraft:deepslate_diamond_ore", 2),
-            Map.entry("minecraft:gold_ore", 2), Map.entry("minecraft:deepslate_gold_ore", 2),
-            Map.entry("minecraft:emerald_ore", 2), Map.entry("minecraft:deepslate_emerald_ore", 2),
-            Map.entry("minecraft:redstone_ore", 2), Map.entry("minecraft:deepslate_redstone_ore", 2),
-            Map.entry("minecraft:ancient_debris", 4),
-            Map.entry("minecraft:obsidian", 4), Map.entry("minecraft:crying_obsidian", 4)
-    );
-
-    /**
-     * The minimum tool tier that should be used to break the given block without losing its drops.
-     * 0 means no special requirement (the {@code pathClearMaxToolTier} limit applies normally).
-     */
-    public static int getMinTierForBlock(Block b) {
-        Identifier key = BuiltInRegistries.BLOCK.getKey(b);
-        return key == null ? 0 : MIN_TIER_BY_BLOCK.getOrDefault(key.toString(), 0);
-    }
-
-    private static final ItemStack PICKAXE_REFERENCE = new ItemStack(Items.DIAMOND_PICKAXE);
-
-    /**
-     * Whether breaking the given block requires a pickaxe to be effective. When the tier cap is
-     * set and no in-cap pickaxe remains, path clearing stops breaking these blocks instead of
-     * falling back to better tools. Blocks that don't require a pickaxe (e.g. wood or gravel)
-     * never trigger the stop.
-     */
-    public static boolean requiresPickaxe(Block b) {
-        return PICKAXE_REFERENCE.isCorrectToolForDrops(b.defaultBlockState());
-    }
-
-    /**
-     * The effective tier bounds used for path clearing a block under the tier cap. Computed in one
-     * place so that the cost calculation and the execution side always agree.
-     *
-     * @param minTier  The block's hardcoded minimum tier to drop anything, 0 if it has none
-     * @param lo       The lowest allowed tier
-     * @param hi       The highest allowed tier, -1 for no upper bound
-     * @param backdoor Whether the block's minimum requirement exceeds the cap, which lifts the
-     *                 upper bound so that the block is never broken with a tool too weak to drop it
-     */
-    public record SelectionBounds(int minTier, int lo, int hi, boolean backdoor) {}
-
-    public static SelectionBounds pathClearBounds(Block b, int maxTier) {
-        int minTier = maxTier >= 0 ? getMinTierForBlock(b) : 0;
-        boolean backdoor = maxTier >= 0 && minTier > maxTier;
-        return new SelectionBounds(minTier, backdoor ? minTier : 0, backdoor ? -1 : maxTier, backdoor);
-    }
-
-    // the last requested backpack fetch that hasn't executed yet, remembered so that the waiting
-    // loop doesn't rescan the inventory every tick
-    private static Block pendingFetchBlock;
-    private static int pendingFetchSlot = -1;
-
-    public static int getPendingFetchSlot(Block b) {
-        return pendingFetchBlock == b ? pendingFetchSlot : -1;
-    }
-
-    public static void setPendingFetch(Block b, int slot) {
-        pendingFetchBlock = b;
-        pendingFetchSlot = slot;
-    }
 
     private static final Map<String, String> lastDebugLogByContext = new HashMap<>();
 
@@ -220,13 +143,8 @@ public class ToolSet {
     }
 
     public ToolSet(LocalPlayer player) {
-        this(player, -1);
-    }
-
-    public ToolSet(LocalPlayer player, int maxTier) {
         breakStrengthCache = new HashMap<>();
         this.player = player;
-        this.maxTier = maxTier;
 
         if (Baritone.settings().considerPotionEffects.value) {
             double amplifier = potionAmplifier();
@@ -306,39 +224,11 @@ public class ToolSet {
             return player.getInventory().getSelectedSlot();
         }
 
-        // When the tier cap is set, path clearing only uses tools within the cap (for blocks that
-        // need a pickaxe, only pickaxes within the cap, or above the block's minimum tier as a
-        // backdoor). If no eligible tool can be found at all, selection returns -1 and path
-        // clearing stops instead of falling back to better tools. With the cap disabled (-1) the
-        // original behavior is kept exactly.
-        SelectionBounds bounds = pathClearBounds(b, this.maxTier);
-        int best;
-        if (this.maxTier >= 0) {
-            best = getBestSlotWithinTier(b, preferSilkTouch, bounds.lo(), bounds.hi(), requiresPickaxe(b));
-            if (best == -1 && pathingCalculation && Baritone.settings().allowInventory.value) {
-                // for cost estimation we can assume that the best in-tier tool in the main inventory
-                // will be moved to the hotbar, since execution will fetch it
-                best = getBestSlotWithinTier(b, preferSilkTouch, bounds.lo(), bounds.hi(), requiresPickaxe(b), 9, 36);
-            }
-        } else {
-            best = getBestSlotWithinTier(b, preferSilkTouch, 0, -1);
-            if (best == -1) {
-                best = 0; // original behavior: default to slot 0 if nothing at all can be used
-            }
-        }
-        if (best == -1) {
-            logDebugDeduped("[ToolSet] " + b + " maxTier=" + this.maxTier
-                    + (bounds.minTier() > 0 ? " minTier=" + bounds.minTier() : "")
-                    + " -> stopped (no eligible tool available)");
-            return best;
-        }
-        String extra = bounds.backdoor() ? " (backdoor, block needs tier " + bounds.minTier() + ")" : "";
-        ItemStack stack = player.getInventory().getItem(best);
-        logDebugDeduped("[ToolSet] " + b + " maxTier=" + this.maxTier
-                + (bounds.minTier() > 0 ? " minTier=" + bounds.minTier() : "")
-                + extra
-                + " -> slot " + best + " (" + (stack.isEmpty() ? "hand" : stack.getItem()) + ", tier " + getMaterialCost(stack) + ")");
-        return best;
+        // minTier=-1 admits the bare hand and non-tool slots (material cost -1) as candidates, and
+        // the tie-break below prefers the lowest material cost, so the hand wins on speed ties to
+        // conserve durability. Fall back to slot 0 when the hotbar has nothing usable at all.
+        int best = getBestSlotWithinTier(b, preferSilkTouch, -1, -1, false);
+        return best == -1 ? 0 : best;
     }
 
     public int getBestSlotWithinTier(Block b, boolean preferSilkTouch, int minTier, int maxTier) {
@@ -410,13 +300,7 @@ public class ToolSet {
      * @return A double containing the destruction ticks with the best tool
      */
     private double getBestDestructionTime(Block b) {
-        int slot = getBestSlot(b, false, true);
-        if (slot == -1) {
-            // no eligible tool remains (e.g. the in-cap pickaxe is exhausted), treat the block as
-            // unbreakable so that pathing stops mining it
-            return -1;
-        }
-        ItemStack stack = player.getInventory().getItem(slot);
+        ItemStack stack = player.getInventory().getItem(getBestSlot(b, false, true));
         return calculateSpeedVsBlock(stack, b.defaultBlockState()) * avoidanceMultiplier(b);
     }
 

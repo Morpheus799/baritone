@@ -116,27 +116,23 @@ public final class Settings {
     public final Setting<Boolean> autoTool = new Setting<>(true);
 
     /**
-     * The maximum tool material tier that Baritone may use when automatically selecting a tool for breaking
-     * blocks in the way of a movement (path clearing).
+     * The maximum tool material tier that Baritone prefers when automatically selecting a tool for
+     * breaking blocks in the way of a movement (path clearing), to conserve better tools.
      * <p>
      * -1 to disable the limit (default). Otherwise, valid values are 0 (wood) through 5 (netherite),
      * corresponding to the order of the tool material tiers in ToolSet.
      * <p>
-     * If no tool within the tier limit is on the hotbar, Baritone will attempt to move one from the
-     * main inventory to the hotbar (requires {@code allowInventory}).
+     * Pathfinding cost is always computed with the default (unrestricted) best tool, so this setting
+     * never changes which route is chosen &mdash; only which tool is held while clearing.
      * <p>
-     * When the limit is set and no eligible tool can be found at all (for blocks that need a
-     * pickaxe: no pickaxe within the limit, or above the block's minimum tier as a backdoor), path
-     * clearing stops breaking instead of falling back to better tools. Blocks that don't need a
-     * pickaxe (e.g. wood or gravel) accept any in-limit tool, so a missing axe or shovel doesn't
-     * stop mining while an in-limit pickaxe remains.
-     * <p>
-     * Ores and other blocks with a hardcoded minimum tool requirement only bypass this limit when it
-     * is below what the block needs to drop anything; otherwise they are mined with the best
-     * in-limit tool as usual.
+     * While clearing, Baritone prefers the best tool at or below the limit that can actually mine and
+     * drop the block. If none is on the hotbar it will try to move one up from the main inventory
+     * (requires {@code allowInventory}). When no in-limit tool can be found &mdash; e.g. the block
+     * needs a pickaxe above the limit (obsidian, ores) or the limit tool can't drop it &mdash; it
+     * falls back to the default best tool and keeps mining. It never stops path clearing.
      * <p>
      * This only affects path clearing. Mining target blocks (e.g. {@code #mine}, farming, or breaking
-     * incorrect blocks while building) always uses the original unrestricted tool selection.
+     * incorrect blocks while building) always uses the unrestricted tool selection.
      */
     public final Setting<Integer> pathClearMaxToolTier = new Setting<>(-1);
 

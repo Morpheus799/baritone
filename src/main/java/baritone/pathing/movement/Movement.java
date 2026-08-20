@@ -163,11 +163,7 @@ public abstract class Movement implements IMovement, MovementHelper {
             }
             if (!MovementHelper.canWalkThrough(ctx, blockPos)) { // can't break air, so don't try
                 somethingInTheWay = true;
-                if (!MovementHelper.switchToBestToolForPathClear(ctx, BlockStateInterface.get(ctx, blockPos))) {
-                    // the in-tier pickaxe is exhausted, stop mining this block
-                    state.setStatus(MovementStatus.UNREACHABLE);
-                    return true;
-                }
+                MovementHelper.switchToBestToolForPathClear(ctx, BlockStateInterface.get(ctx, blockPos));
                 Optional<Rotation> reachable = RotationUtils.reachable(ctx, blockPos, ctx.playerController().getBlockReachDistance());
                 if (reachable.isPresent()) {
                     Rotation rotTowardsBlock = reachable.get();

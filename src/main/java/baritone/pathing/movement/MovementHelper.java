@@ -675,86 +675,64 @@ public interface MovementHelper extends ActionCosts, Helper {
     }
 
     /**
-     * AutoTool for a specific block with precomputed ToolSet data
-     *
-     * @param ctx The player context
-     * @param b   the blockstate to mine
-     * @param ts  previously calculated ToolSet
-     */
-    /**
      * AutoTool for a specific block that is obstructing a movement ("path clearing"), respecting
-     * {@link baritone.api.Settings#pathClearMaxToolTier}
+     * {@link baritone.api.Settings#pathClearMaxToolTier}.
+     * <p>
+     * Prefers the best tool at or below the tier cap that can mine and drop the block; if none is on
+     * the hotbar, tries to bring one up from the main inventory. When no in-cap tool can be found (or
+     * one is still being fetched this tick), it falls back to the default best tool and keeps mining
+     * &mdash; it never stops. Pathfinding cost is always computed with the default tool, so this only
+     * changes which tool is held, not whether the block is broken.
      *
      * @param ctx The player context
      * @param b   the blockstate to mine
      */
-    /**
-     * AutoTool for a specific block that is obstructing a movement ("path clearing"), respecting
-     * {@link baritone.api.Settings#pathClearMaxToolTier}
-     *
-     * @param ctx The player context
-     * @param b   the blockstate to mine
-     * @return Whether the movement may proceed with breaking this block. Returns {@code false} when
-     * the tier cap is set and no eligible tool remains, in which case mining must stop.
-     */
-    static boolean switchToBestToolForPathClear(IPlayerContext ctx, BlockState b) {
+    static void switchToBestToolForPathClear(IPlayerContext ctx, BlockState b) {
         if (!Baritone.settings().autoTool.value || Baritone.settings().assumeExternalAutoTool.value) {
-            return true;
+            return;
         }
         Baritone baritone = (Baritone) BaritoneAPI.getProvider().getBaritoneForPlayer(ctx.player());
         if (baritone != null && baritone.getMineProcess().isTargetBlock(b)) {
-            // target blocks (e.g. #mine ores) always use the original unrestricted tool selection,
-            // even when a movement breaks them as part of path clearing
+            // target blocks (e.g. #mine ores) always use the unrestricted tool selection, even when
+            // a movement breaks them as part of path clearing
             switchToBestToolFor(ctx, b);
-            return true;
+            return;
         }
         int maxTier = BaritoneAPI.getSettings().pathClearMaxToolTier.value;
-        ToolSet.SelectionBounds bounds = ToolSet.pathClearBounds(b.getBlock(), maxTier);
+        if (maxTier < 0) {
+            switchToBestToolFor(ctx, b);
+            return;
+        }
         boolean preferSilkTouch = BaritoneAPI.getSettings().preferSilkTouch.value;
-        String logPrefix = "[PathClear] " + b + " maxTier=" + maxTier
-                + (bounds.minTier() > 0 ? " minTier=" + bounds.minTier() : "");
+        String logPrefix = "[PathClear] " + b + " maxTier=" + maxTier;
+        ToolSet ts = new ToolSet(ctx.player());
+        // best in-cap tool on the hotbar that can mine and drop the block (correctToolOnly=true, so
+        // for blocks needing a pickaxe only a sufficient-tier pickaxe qualifies; other blocks accept
+        // any in-cap tool)
+        int slot = ts.getBestSlotWithinTier(b.getBlock(), preferSilkTouch, 0, maxTier, true);
         String extra = "";
-        int slot = -1;
-        if (maxTier >= 0) {
-            ToolSet ts = new ToolSet(ctx.player(), maxTier);
-            slot = ts.getBestSlotWithinTier(b.getBlock(), preferSilkTouch, bounds.lo(), bounds.hi(), ToolSet.requiresPickaxe(b.getBlock()));
-            if (slot != -1) {
-                ToolSet.setPendingFetch(null, -1); // the hotbar has an eligible tool, no fetch needed
-            } else if (Baritone.settings().allowInventory.value) {
-                // no eligible tool on the hotbar, fetch one from the main inventory. Remember the
-                // requested slot so the waiting loop doesn't rescan the inventory every tick.
-                int backpack = ToolSet.getPendingFetchSlot(b.getBlock());
-                if (backpack == -1) {
-                    backpack = ts.getBestBackpackSlotWithinTier(b.getBlock(), preferSilkTouch, bounds.lo(), bounds.hi(), ToolSet.requiresPickaxe(b.getBlock()));
-                    if (backpack != -1) {
-                        ToolSet.setPendingFetch(b.getBlock(), backpack);
-                    }
-                }
-                if (backpack != -1 && baritone != null) {
-                    int dest = baritone.getInventoryBehavior().attemptToBringToHotbar(backpack);
-                    if (dest != -1) {
-                        slot = dest;
-                        ToolSet.setPendingFetch(null, -1);
-                        extra = " (fetched from backpack slot " + backpack + ")";
-                    } else {
-                        // the move is pending, wait for the next tick instead of stopping
-                        ToolSet.logDebugDeduped(logPrefix + " -> waiting to fetch from backpack slot " + backpack);
-                        return true;
-                    }
+        if (slot == -1 && Baritone.settings().allowInventory.value && baritone != null) {
+            // none on the hotbar: try to bring an in-cap tool up from the main inventory. The swap
+            // cooldown throttles this, and if it can't happen this tick we simply fall back below.
+            int backpack = ts.getBestBackpackSlotWithinTier(b.getBlock(), preferSilkTouch, 0, maxTier, true);
+            if (backpack != -1) {
+                int dest = baritone.getInventoryBehavior().attemptToBringToHotbar(backpack);
+                if (dest != -1) {
+                    slot = dest;
+                    extra = " (fetched from backpack slot " + backpack + ")";
                 }
             }
-            if (slot == -1) {
-                // no eligible tool remains, stop mining instead of falling back to better tools
-                ToolSet.logDebugDeduped(logPrefix + " -> stopped (no eligible tool available)");
-                return false;
-            }
-        } else {
-            slot = new ToolSet(ctx.player(), -1).getBestSlot(b.getBlock(), preferSilkTouch);
+        }
+        if (slot == -1) {
+            // no in-cap tool available (or still being fetched): use the default best tool and keep
+            // mining rather than stopping
+            ToolSet.logDebugDeduped(logPrefix + " -> no in-cap tool, using default");
+            switchToBestToolFor(ctx, b);
+            return;
         }
         ctx.player().getInventory().setSelectedSlot(slot);
         ItemStack stack = ctx.player().getInventory().getItem(slot);
         ToolSet.logDebugDeduped(logPrefix + " -> slot " + slot + " (" + (stack.isEmpty() ? "hand" : stack.getItem()) + ")" + extra);
-        return true;
     }
 
     static void moveTowards(IPlayerContext ctx, MovementState state, BlockPos pos) {
