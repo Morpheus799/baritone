@@ -46,6 +46,12 @@ public final class InventoryBehavior extends Behavior implements Helper {
 
     int ticksSinceLastInventoryMove;
     int[] lastTickRequestedMove; // not everything asks every tick, so remember the request while coming to a halt
+    /**
+     * Number of tools currently packed into the "tool zone" at the left of the hotbar (slots
+     * {@code [0, toolZoneCount)}). Grows as tools are brought up during a task and resets to 0 when
+     * idle. Slot 8 is reserved for the throwaway/tiptoe block. See {@link #placeToolInZone(int)}.
+     */
+    private int toolZoneCount;
 
     public InventoryBehavior(Baritone baritone) {
         super(baritone);
@@ -64,12 +70,17 @@ public final class InventoryBehavior extends Behavior implements Helper {
             return;
         }
         ticksSinceLastInventoryMove++;
-        if (firstValidThrowaway() >= 9) { // aka there are none on the hotbar, but there are some in main inventory
-            requestSwapWithHotBar(firstValidThrowaway(), 8);
-        }
-        int pick = bestToolAgainst(Blocks.STONE);
-        if (pick >= 9) {
-            requestSwapWithHotBar(pick, 0);
+        // Only manage the hotbar while Baritone is actually executing a task (some process is in
+        // control). When idle, leave the player's hotbar alone and reset the tool zone so the next
+        // task rebuilds it from slot 0.
+        if (baritone.getPathingControlManager().mostRecentInControl().isEmpty()) {
+            toolZoneCount = 0;
+        } else if (!isThrowaway(ctx.player().getInventory().getItem(8))) {
+            // keep a "tiptoe"/throwaway block in the rightmost hotbar slot for pillaring/bridging
+            int src = firstValidThrowaway();
+            if (src != -1) {
+                requestSwapWithHotBar(src, 8);
+            }
         }
         if (lastTickRequestedMove != null) {
             logDebug("Remembering to move " + lastTickRequestedMove[0] + " " + lastTickRequestedMove[1] + " from a previous tick");
@@ -103,6 +114,43 @@ public final class InventoryBehavior extends Behavior implements Helper {
             return destination.getAsInt();
         }
         return -1;
+    }
+
+    /**
+     * Ensure the tool at the given inventory slot occupies a slot in the "tool zone" &mdash; tools
+     * packed from slot 0, growing rightward as they are brought up during a task; slot 8 stays
+     * reserved for the throwaway/tiptoe block. Moves the tool in if it isn't already in the zone.
+     * <p>
+     * When the zone is full (slots 0-7 all tools), slot 0 is kept and new tools always replace slot 1.
+     *
+     * @param srcSlot inventory slot currently holding the tool (0-8 hotbar, 9-35 main inventory)
+     * @return the hotbar slot the tool now occupies, or -1 if the required move was throttled this tick
+     */
+    public int placeToolInZone(int srcSlot) {
+        if (srcSlot >= 0 && srcSlot < toolZoneCount) {
+            return srcSlot; // already in the zone; use it where it is
+        }
+        int target = toolZoneCount < 8 ? toolZoneCount : 1; // full -> always recycle the second slot
+        if (srcSlot == target) {
+            advanceToolZone();
+            return target;
+        }
+        if (requestSwapWithHotBar(srcSlot, target)) {
+            advanceToolZone();
+            return target;
+        }
+        return -1;
+    }
+
+    private void advanceToolZone() {
+        if (toolZoneCount < 8) {
+            toolZoneCount++;
+        }
+        // once full the zone stays full and new tools recycle slot 1 (see placeToolInZone)
+    }
+
+    private boolean isThrowaway(ItemStack stack) {
+        return Baritone.settings().acceptableThrowawayItems.value.contains(stack.getItem());
     }
 
     public OptionalInt getTempHotbarSlot(Predicate<Integer> disallowedHotbar) {

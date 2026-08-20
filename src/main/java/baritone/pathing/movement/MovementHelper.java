@@ -653,22 +653,28 @@ public interface MovementHelper extends ActionCosts, Helper {
         }
         boolean preferSilkTouch = BaritoneAPI.getSettings().preferSilkTouch.value;
         ToolSet ts = new ToolSet(ctx.player());
-        int slot = ts.getBestSlot(b.getBlock(), preferSilkTouch);
+        int slot = ts.getBestSlot(b.getBlock(), preferSilkTouch); // best tool currently on the hotbar
         if (Baritone.settings().allowInventory.value) {
-            // target block mining: also consider the main inventory and fetch a strictly better tool
-            int backpack = ts.getBestBackpackSlotWithinTier(b.getBlock(), preferSilkTouch, -1);
-            if (backpack != -1) {
-                ItemStack hotbarStack = ctx.player().getInventory().getItem(slot);
-                ItemStack backpackStack = ctx.player().getInventory().getItem(backpack);
-                if (ToolSet.calculateSpeedVsBlock(backpackStack, b) > ToolSet.calculateSpeedVsBlock(hotbarStack, b)) {
-                    Baritone baritone = (Baritone) BaritoneAPI.getProvider().getBaritoneForPlayer(ctx.player());
-                    if (baritone != null) {
-                        int dest = baritone.getInventoryBehavior().attemptToBringToHotbar(backpack);
-                        if (dest != -1) {
-                            slot = dest;
-                        }
+            Baritone baritone = (Baritone) BaritoneAPI.getProvider().getBaritoneForPlayer(ctx.player());
+            if (baritone != null) {
+                int src = slot;
+                // also consider a strictly better tool sitting in the main inventory
+                int backpack = ts.getBestBackpackSlotWithinTier(b.getBlock(), preferSilkTouch, -1);
+                if (backpack != -1) {
+                    ItemStack hotbarStack = ctx.player().getInventory().getItem(slot);
+                    ItemStack backpackStack = ctx.player().getInventory().getItem(backpack);
+                    if (ToolSet.calculateSpeedVsBlock(backpackStack, b) > ToolSet.calculateSpeedVsBlock(hotbarStack, b)) {
+                        src = backpack;
                     }
                 }
+                // consolidate the chosen tool into the tool zone (moving it in from the backpack, or
+                // from elsewhere on the hotbar, if it isn't already there)
+                int zoneSlot = baritone.getInventoryBehavior().placeToolInZone(src);
+                if (zoneSlot != -1) {
+                    ctx.player().getInventory().setSelectedSlot(zoneSlot);
+                    return;
+                }
+                // the move was throttled this tick: fall back to the best tool already on the hotbar
             }
         }
         ctx.player().getInventory().setSelectedSlot(slot);
@@ -709,30 +715,38 @@ public interface MovementHelper extends ActionCosts, Helper {
         // best in-cap tool on the hotbar that can mine and drop the block (correctToolOnly=true, so
         // for blocks needing a pickaxe only a sufficient-tier pickaxe qualifies; other blocks accept
         // any in-cap tool)
-        int slot = ts.getBestSlotWithinTier(b.getBlock(), preferSilkTouch, 0, maxTier, true);
+        int src = ts.getBestSlotWithinTier(b.getBlock(), preferSilkTouch, 0, maxTier, true);
         String extra = "";
-        if (slot == -1 && Baritone.settings().allowInventory.value && baritone != null) {
-            // none on the hotbar: try to bring an in-cap tool up from the main inventory. The swap
-            // cooldown throttles this, and if it can't happen this tick we simply fall back below.
+        if (src == -1 && Baritone.settings().allowInventory.value) {
+            // none on the hotbar: consider bringing an in-cap tool up from the main inventory
             int backpack = ts.getBestBackpackSlotWithinTier(b.getBlock(), preferSilkTouch, 0, maxTier, true);
             if (backpack != -1) {
-                int dest = baritone.getInventoryBehavior().attemptToBringToHotbar(backpack);
-                if (dest != -1) {
-                    slot = dest;
-                    extra = " (fetched from backpack slot " + backpack + ")";
-                }
+                src = backpack;
+                extra = " (from backpack slot " + backpack + ")";
             }
         }
-        if (slot == -1) {
-            // no in-cap tool available (or still being fetched): use the default best tool and keep
-            // mining rather than stopping
+        if (src == -1) {
+            // no in-cap tool available anywhere: use the default best tool and keep mining rather
+            // than stopping
             ToolSet.logDebugDeduped(logPrefix + " -> no in-cap tool, using default");
             switchToBestToolFor(ctx, b);
             return;
         }
-        ctx.player().getInventory().setSelectedSlot(slot);
-        ItemStack stack = ctx.player().getInventory().getItem(slot);
-        ToolSet.logDebugDeduped(logPrefix + " -> slot " + slot + " (" + (stack.isEmpty() ? "hand" : stack.getItem()) + ")" + extra);
+        // consolidate the chosen in-cap tool into the tool zone (from the backpack or elsewhere on
+        // the hotbar). If the move is throttled this tick, use it in place when it's already on the
+        // hotbar, otherwise fall back to the default tool rather than stopping.
+        int zoneSlot = baritone != null ? baritone.getInventoryBehavior().placeToolInZone(src) : (src < 9 ? src : -1);
+        if (zoneSlot == -1) {
+            if (src >= 0 && src < 9) {
+                ctx.player().getInventory().setSelectedSlot(src);
+                return;
+            }
+            switchToBestToolFor(ctx, b);
+            return;
+        }
+        ctx.player().getInventory().setSelectedSlot(zoneSlot);
+        ItemStack stack = ctx.player().getInventory().getItem(zoneSlot);
+        ToolSet.logDebugDeduped(logPrefix + " -> slot " + zoneSlot + " (" + (stack.isEmpty() ? "hand" : stack.getItem()) + ")" + extra);
     }
 
     static void moveTowards(IPlayerContext ctx, MovementState state, BlockPos pos) {
