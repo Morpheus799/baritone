@@ -39,9 +39,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 
-import java.util.ArrayList;
 import java.util.OptionalInt;
-import java.util.Random;
 import java.util.function.Predicate;
 
 public final class InventoryBehavior extends Behavior implements Helper {
@@ -108,24 +106,20 @@ public final class InventoryBehavior extends Behavior implements Helper {
     }
 
     public OptionalInt getTempHotbarSlot(Predicate<Integer> disallowedHotbar) {
-        // we're using 0 and 8 for pickaxe and throwaway
-        ArrayList<Integer> candidates = new ArrayList<>();
+        // slots 0 and 8 are reserved for the pickaxe and throwaway. Fill 1..7 deterministically from
+        // the left: prefer the lowest-numbered empty slot, otherwise displace the lowest-numbered
+        // allowed slot. Deterministic (instead of random) so fetched tools land in stable positions.
         for (int i = 1; i < 8; i++) {
             if (ctx.player().getInventory().getNonEquipmentItems().get(i).isEmpty() && !disallowedHotbar.test(i)) {
-                candidates.add(i);
+                return OptionalInt.of(i);
             }
         }
-        if (candidates.isEmpty()) {
-            for (int i = 1; i < 8; i++) {
-                if (!disallowedHotbar.test(i)) {
-                    candidates.add(i);
-                }
+        for (int i = 1; i < 8; i++) {
+            if (!disallowedHotbar.test(i)) {
+                return OptionalInt.of(i);
             }
         }
-        if (candidates.isEmpty()) {
-            return OptionalInt.empty();
-        }
-        return OptionalInt.of(candidates.get(new Random().nextInt(candidates.size())));
+        return OptionalInt.empty();
     }
 
     private boolean requestSwapWithHotBar(int inInventory, int inHotbar) {
