@@ -46,7 +46,7 @@ public final class BackfillProcess extends BaritoneProcessHelper {
         if (ctx.player() == null || ctx.world() == null) {
             return false;
         }
-        if (!Baritone.settings().backfill.value) {
+        if (!Baritone.settings().backfill.value && !Baritone.settings().backfillTmp.value) {
             return false;
         }
         if (Baritone.settings().allowParkour.value) {

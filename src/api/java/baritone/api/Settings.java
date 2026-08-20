@@ -690,6 +690,31 @@ public final class Settings {
     public final Setting<Boolean> backfill = new Setting<>(false);
 
     /**
+     * When a hostile mob within {@link #mobLockRange} blocks has line of sight to the player and is
+     * facing them ("locked on"), temporarily behave as if {@link #backfill} is enabled &mdash; sealing
+     * the tunnel behind you to break the mob's line of sight so it loses aggro.
+     * <p>
+     * The user's {@link #backfill} setting is never modified. Instead this manages a separate
+     * {@link #backfillTmp} flag that is OR'd into the backfill check, so there is no conflict with a
+     * manually chosen {@link #backfill} value.
+     */
+    public final Setting<Boolean> backfillOnMobLock = new Setting<>(false);
+
+    /**
+     * Range (in blocks) within which a line-of-sight-locked hostile mob activates {@link #backfillOnMobLock}.
+     */
+    public final Setting<Double> mobLockRange = new Setting<>(20.0D);
+
+    /**
+     * Managed automatically by the {@link #backfillOnMobLock} trigger &mdash; do not set manually.
+     * <p>
+     * When {@code true}, backfill behaves as enabled regardless of the user's {@link #backfill} setting.
+     * Marked {@link JavaOnly} so it is never persisted or set through {@code #set}.
+     */
+    @JavaOnly
+    public final Setting<Boolean> backfillTmp = new Setting<>(false);
+
+    /**
      * Shows popup message in the upper right corner, similarly to when you make an advancement
      */
     public final Setting<Boolean> logAsToast = new Setting<>(false);
