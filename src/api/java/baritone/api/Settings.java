@@ -739,6 +739,45 @@ public final class Settings {
     public final Setting<Boolean> backfillTmp = new Setting<>(false);
 
     /**
+     * While Baritone is executing a task (pathing or heading to a goal), predict incoming projectile
+     * trajectories and strafe out of the way using normal movement keys, then resume the task. This
+     * exists because Baritone's movement takeover otherwise prevents external "dodge" mods from working
+     * during a task. Only active while a task is running &mdash; it never seizes movement during manual
+     * play. Uses ordinary key movement (no velocity/packet teleporting) to stay anti-cheat friendly.
+     */
+    public final Setting<Boolean> dodgeProjectiles = new Setting<>(false);
+
+    /**
+     * When {@code false} (default), {@link #dodgeProjectiles} only dodges arrows (and spectral arrows).
+     * When {@code true}, it dodges every predictable projectile (fireballs, wither skulls, wind charges,
+     * tridents, thrown items, llama spit, etc.).
+     */
+    public final Setting<Boolean> dodgeAllProjectiles = new Setting<>(false);
+
+    /**
+     * {@link #dodgeProjectiles} ignores projectiles you fired yourself.
+     */
+    public final Setting<Boolean> dodgeIgnoreOwn = new Setting<>(true);
+
+    /**
+     * {@link #dodgeProjectiles} will not strafe onto a block with no solid ground beneath it, to avoid
+     * dodging off a ledge to your death.
+     */
+    public final Setting<Boolean> dodgeGroundCheck = new Setting<>(true);
+
+    /**
+     * How close (in blocks) a predicted projectile position must come to the player's feet or head for
+     * {@link #dodgeProjectiles} to consider it a hit worth dodging.
+     */
+    public final Setting<Double> dodgeDistanceCheck = new Setting<>(1.0D);
+
+    /**
+     * Maximum number of ticks to simulate each projectile's trajectory for {@link #dodgeProjectiles}.
+     * Zero means no limit (simulation still stops on collision).
+     */
+    public final Setting<Integer> dodgeSimulationSteps = new Setting<>(200);
+
+    /**
      * Shows popup message in the upper right corner, similarly to when you make an advancement
      */
     public final Setting<Boolean> logAsToast = new Setting<>(false);
