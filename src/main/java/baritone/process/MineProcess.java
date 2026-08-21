@@ -34,6 +34,8 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.inventory.ContainerInput;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.AirBlock;
 import net.minecraft.world.level.block.Block;
@@ -61,6 +63,7 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
     private GoalRunAway branchPointRunaway;
     private int desiredQuantity;
     private int tickCount;
+    private int discardCooldown;
 
     public MineProcess(Baritone baritone) {
         super(baritone);
@@ -81,6 +84,19 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
                 logDirect("Have " + curr + " valid items");
                 cancel();
                 return null;
+            }
+        }
+        if (Baritone.settings().mineDropJunkWhenFull.value) {
+            if (discardCooldown > 0) {
+                discardCooldown--;
+            } else if (!inventoryCanAcceptTarget()) {
+                if (discardOneJunkStack()) {
+                    discardCooldown = 10; // let the drop register before considering another
+                } else {
+                    logNotification("Inventory full and no junk to discard, stopping mine", true);
+                    cancel();
+                    return null;
+                }
             }
         }
         if (calcFailed) {
@@ -161,6 +177,45 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
             }
         }
         anticipatedDrops = copy;
+    }
+
+    /**
+     * Whether the inventory can pick up the target block's drop right now: there's an empty slot, or
+     * an unfilled stack of a matching item.
+     */
+    private boolean inventoryCanAcceptTarget() {
+        var inv = ctx.player().getInventory();
+        for (int i = 0; i < 36; i++) {
+            ItemStack s = inv.getItem(i);
+            if (s.isEmpty()) {
+                return true;
+            }
+            if (filter.has(s) && s.getCount() < s.getMaxStackSize()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Drops one whole stack of the highest-priority junk item present (in {@code mineJunkItems}
+     * order), never dropping what is currently being mined. Returns whether something was dropped.
+     */
+    private boolean discardOneJunkStack() {
+        var inv = ctx.player().getInventory();
+        for (Item junk : Baritone.settings().mineJunkItems.value) {
+            for (int i = 0; i < 36; i++) {
+                ItemStack s = inv.getItem(i);
+                if (s.isEmpty() || s.getItem() != junk || filter.has(s)) {
+                    continue;
+                }
+                int containerSlot = i < 9 ? i + 36 : i;
+                ctx.playerController().windowClick(ctx.player().inventoryMenu.containerId, containerSlot, 1, ContainerInput.THROW, ctx.player());
+                logDebug("Inventory full, dropping " + s.getCount() + "x " + junk);
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override

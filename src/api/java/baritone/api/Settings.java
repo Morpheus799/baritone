@@ -1213,6 +1213,31 @@ public final class Settings {
     public final Setting<Long> mineDropLoiterDurationMSThanksLouca = new Setting<>(250L);
 
     /**
+     * While mining, if the inventory can't accept the target block's drop (no empty slot and no
+     * unfilled stack of the target), drop junk items from {@link #mineJunkItems} (in order) to make
+     * room, until the target can be picked up. If there is no junk left to drop, mining stops with a
+     * notification.
+     */
+    public final Setting<Boolean> mineDropJunkWhenFull = new Setting<>(false);
+
+    /**
+     * The junk items {@link #mineDropJunkWhenFull} is allowed to drop to make room, in priority order.
+     * Items matching what is currently being mined are never dropped.
+     */
+    public final Setting<List<Item>> mineJunkItems = new Setting<>(new ArrayList<>(Arrays.asList(
+            Blocks.GRAVEL.asItem(),
+            Blocks.COBBLESTONE.asItem(),
+            Blocks.STONE.asItem(),
+            Blocks.COBBLED_DEEPSLATE.asItem(),
+            Blocks.DEEPSLATE.asItem(),
+            Blocks.GRANITE.asItem(),
+            Blocks.DIORITE.asItem(),
+            Blocks.ANDESITE.asItem(),
+            Blocks.TUFF.asItem(),
+            Blocks.DIRT.asItem()
+    )));
+
+    /**
      * Trim incorrect positions too far away, helps performance but hurts reliability in very large schematics
      */
     public final Setting<Boolean> distanceTrim = new Setting<>(true);
