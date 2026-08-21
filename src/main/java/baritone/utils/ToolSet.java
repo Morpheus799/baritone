@@ -253,8 +253,8 @@ public class ToolSet {
         return getBestSlotWithinTier(b, preferSilkTouch, minTier, maxTier, false);
     }
 
-    public int getBestSlotWithinTier(Block b, boolean preferSilkTouch, int minTier, int maxTier, boolean pickaxeOnly) {
-        return getBestSlotWithinTier(b, preferSilkTouch, minTier, maxTier, pickaxeOnly, 0, 9);
+    public int getBestSlotWithinTier(Block b, boolean preferSilkTouch, int minTier, int maxTier, boolean correctToolOnly) {
+        return getBestSlotWithinTier(b, preferSilkTouch, minTier, maxTier, correctToolOnly, 0, 9);
     }
 
     /**
@@ -264,11 +264,11 @@ public class ToolSet {
         return getBestBackpackSlotWithinTier(b, preferSilkTouch, 0, maxTier, false);
     }
 
-    public int getBestBackpackSlotWithinTier(Block b, boolean preferSilkTouch, int minTier, int maxTier, boolean pickaxeOnly) {
-        return getBestSlotWithinTier(b, preferSilkTouch, minTier, maxTier, pickaxeOnly, 9, 36);
+    public int getBestBackpackSlotWithinTier(Block b, boolean preferSilkTouch, int minTier, int maxTier, boolean correctToolOnly) {
+        return getBestSlotWithinTier(b, preferSilkTouch, minTier, maxTier, correctToolOnly, 9, 36);
     }
 
-    private int getBestSlotWithinTier(Block b, boolean preferSilkTouch, int minTier, int maxTier, boolean pickaxeOnly, int startIncl, int endExcl) {
+    private int getBestSlotWithinTier(Block b, boolean preferSilkTouch, int minTier, int maxTier, boolean correctToolOnly, int startIncl, int endExcl) {
         int best = -1;
         double highestSpeed = Double.NEGATIVE_INFINITY;
         int lowestCost = Integer.MIN_VALUE;
@@ -287,7 +287,7 @@ public class ToolSet {
             if (tier < minTier || (maxTier >= 0 && tier > maxTier)) {
                 continue;
             }
-            if (pickaxeOnly && !itemStack.isCorrectToolForDrops(blockState)) {
+            if (correctToolOnly && !itemStack.isCorrectToolForDrops(blockState)) {
                 continue;
             }
             double speed = calculateSpeedVsBlock(itemStack, blockState);
@@ -295,15 +295,14 @@ public class ToolSet {
             if (speed > highestSpeed) {
                 highestSpeed = speed;
                 best = i;
-                lowestCost = getMaterialCost(itemStack);
+                lowestCost = tier;
                 bestSilkTouch = silkTouch;
             } else if (speed == highestSpeed) {
-                int cost = getMaterialCost(itemStack);
-                if ((cost < lowestCost && (silkTouch || !bestSilkTouch)) ||
+                if ((tier < lowestCost && (silkTouch || !bestSilkTouch)) ||
                         (preferSilkTouch && !bestSilkTouch && silkTouch)) {
                     highestSpeed = speed;
                     best = i;
-                    lowestCost = cost;
+                    lowestCost = tier;
                     bestSilkTouch = silkTouch;
                 }
             }
