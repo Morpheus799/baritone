@@ -265,7 +265,9 @@ public final class Settings {
             Blocks.DIRT.asItem(),
             Blocks.COBBLESTONE.asItem(),
             Blocks.NETHERRACK.asItem(),
-            Blocks.STONE.asItem()
+            Blocks.STONE.asItem(),
+            Blocks.DEEPSLATE.asItem(),
+            Blocks.COBBLED_DEEPSLATE.asItem()
     )));
 
     /**
