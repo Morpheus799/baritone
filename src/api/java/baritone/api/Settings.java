@@ -1230,8 +1230,10 @@ public final class Settings {
     public final Setting<Boolean> mineDropJunkWhenFull = new Setting<>(false);
 
     /**
-     * The junk items {@link #mineDropJunkWhenFull} is allowed to drop to make room, in priority order.
-     * Items matching what is currently being mined are never dropped.
+     * The items {@link #mineDropJunkWhenFull} uses to decide what to drop to make room. By default this
+     * is a <b>blacklist</b> of junk to drop, in priority order; set {@link #mineJunkItemsWhitelist} to
+     * flip it into a <b>whitelist</b> of items to keep. Items matching what is currently being mined are
+     * never dropped in either mode.
      */
     public final Setting<List<Item>> mineJunkItems = new Setting<>(new ArrayList<>(Arrays.asList(
             Blocks.GRAVEL.asItem(),
@@ -1245,6 +1247,20 @@ public final class Settings {
             Blocks.TUFF.asItem(),
             Blocks.DIRT.asItem()
     )));
+
+    /**
+     * How {@link #mineJunkItems} is interpreted when {@link #mineDropJunkWhenFull} makes room.
+     * <p>
+     * When {@code false} (default), the list is a <b>blacklist</b>: only items in it are dropped, in
+     * list order (the original behavior).
+     * <p>
+     * When {@code true}, the list is a <b>whitelist</b> of items to <b>keep</b>: any other item is
+     * dropped to make room, scanning the inventory left to right. Regardless of the list, these are
+     * never dropped: the block currently being mined, and Baritone's managed hotbar tool zone &mdash;
+     * the packed tools, the tool in hand, and the reserved throwaway/scaffolding block at the end of the
+     * hotbar (slot 8). If the inventory fills up with only protected items, mining stops as usual.
+     */
+    public final Setting<Boolean> mineJunkItemsWhitelist = new Setting<>(false);
 
     /**
      * Trim incorrect positions too far away, helps performance but hurts reliability in very large schematics

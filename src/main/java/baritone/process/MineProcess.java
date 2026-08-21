@@ -198,24 +198,57 @@ public final class MineProcess extends BaritoneProcessHelper implements IMinePro
     }
 
     /**
-     * Drops one whole stack of the highest-priority junk item present (in {@code mineJunkItems}
-     * order), never dropping what is currently being mined. Returns whether something was dropped.
+     * Drops one whole stack to make room, never dropping what is currently being mined. Returns whether
+     * something was dropped.
+     * <p>
+     * Blacklist mode (default): drops the highest-priority junk item present, in {@code mineJunkItems}
+     * order. Whitelist mode ({@code mineJunkItemsWhitelist}): drops the first stack that is not on the
+     * keep list, scanning slots left to right, while also protecting Baritone's managed tool zone, the
+     * held tool, and the reserved throwaway/scaffolding block at the end of the hotbar (slot 8).
      */
     private boolean discardOneJunkStack() {
         var inv = ctx.player().getInventory();
+        if (Baritone.settings().mineJunkItemsWhitelist.value) {
+            List<Item> keep = Baritone.settings().mineJunkItems.value;
+            int toolZone = baritone.getInventoryBehavior().getToolZoneCount();
+            int selected = inv.getSelectedSlot();
+            for (int i = 0; i < 36; i++) {
+                ItemStack s = inv.getItem(i);
+                if (s.isEmpty() || filter.has(s)) {
+                    continue;
+                }
+                if (i < 9 && (i < toolZone || i == 8 || i == selected)) {
+                    continue; // managed tool zone, reserved throwaway/scaffolding slot, or the tool in hand
+                }
+                if (keep.contains(s.getItem())) {
+                    continue; // kept by the whitelist
+                }
+                dropStack(i);
+                logDebug("Inventory full, dropping non-whitelisted " + s.getCount() + "x " + s.getItem());
+                return true;
+            }
+            return false;
+        }
         for (Item junk : Baritone.settings().mineJunkItems.value) {
             for (int i = 0; i < 36; i++) {
                 ItemStack s = inv.getItem(i);
                 if (s.isEmpty() || s.getItem() != junk || filter.has(s)) {
                     continue;
                 }
-                int containerSlot = i < 9 ? i + 36 : i;
-                ctx.playerController().windowClick(ctx.player().inventoryMenu.containerId, containerSlot, 1, ContainerInput.THROW, ctx.player());
+                dropStack(i);
                 logDebug("Inventory full, dropping " + s.getCount() + "x " + junk);
                 return true;
             }
         }
         return false;
+    }
+
+    /**
+     * Throws the whole stack in the given inventory slot (0-8 hotbar, 9-35 main) onto the ground.
+     */
+    private void dropStack(int slot) {
+        int containerSlot = slot < 9 ? slot + 36 : slot;
+        ctx.playerController().windowClick(ctx.player().inventoryMenu.containerId, containerSlot, 1, ContainerInput.THROW, ctx.player());
     }
 
     @Override

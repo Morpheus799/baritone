@@ -149,6 +149,14 @@ public final class InventoryBehavior extends Behavior implements Helper {
         // once full the zone stays full and new tools recycle slot 1 (see placeToolInZone)
     }
 
+    /**
+     * Number of Baritone-managed tools packed into the "tool zone" at the left of the hotbar, i.e. the
+     * count of hotbar slots {@code [0, count)} that hold managed tools and should not be discarded.
+     */
+    public int getToolZoneCount() {
+        return toolZoneCount;
+    }
+
     private boolean isThrowaway(ItemStack stack) {
         return Baritone.settings().acceptableThrowawayItems.value.contains(stack.getItem());
     }
