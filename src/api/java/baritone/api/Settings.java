@@ -137,6 +137,19 @@ public final class Settings {
     public final Setting<Integer> pathClearMaxToolTier = new Setting<>(-1);
 
     /**
+     * When {@link #pathClearMaxToolTier} is set and the in-limit path-clearing tool runs out, whether
+     * to keep mining by falling back to the unrestricted best tool.
+     * <p>
+     * {@code true} (default) &mdash; never stop: fall back to the best tool and keep clearing.
+     * <p>
+     * {@code false} &mdash; conserve tools: when no in-limit tool remains, blocks that don't need a
+     * correct tool to drop (e.g. gravel, sand, dirt) are mined by hand, while blocks that require a
+     * correct tool (e.g. stone, ores) stop path clearing (the movement fails) instead of falling back
+     * to a better tool.
+     */
+    public final Setting<Boolean> pathClearContinueWhenToolExhausted = new Setting<>(true);
+
+    /**
      * It doesn't actually take twenty ticks to place a block, this cost is so high
      * because we want to generally conserve blocks which might be limited.
      * <p>

@@ -131,7 +131,7 @@ public class ToolSet {
         }
     }
 
-    private static synchronized void appendToLogFile(String line) {
+    public static synchronized void appendToLogFile(String line) {
         try {
             Path logFile = Minecraft.getInstance().gameDirectory.toPath().resolve("logs").resolve("baritone.log");
             Files.createDirectories(logFile.getParent());
@@ -212,6 +212,24 @@ public class ToolSet {
 
     public int getBestSlot(Block b, boolean preferSilkTouch) {
         return getBestSlot(b, preferSilkTouch, false);
+    }
+
+    /**
+     * A hotbar slot (0-8) suitable for bare-hand-equivalent mining &mdash; an empty slot, or failing
+     * that a non-tool item that won't be worn down &mdash; or -1 if the whole hotbar holds tools.
+     */
+    public int getHandSlot() {
+        int nonTool = -1;
+        for (int i = 0; i < 9; i++) {
+            ItemStack stack = player.getInventory().getItem(i);
+            if (stack.isEmpty()) {
+                return i;
+            }
+            if (nonTool == -1 && !stack.getItem().components().has(DataComponents.TOOL)) {
+                nonTool = i;
+            }
+        }
+        return nonTool;
     }
 
     public int getBestSlot(Block b, boolean preferSilkTouch, boolean pathingCalculation) {

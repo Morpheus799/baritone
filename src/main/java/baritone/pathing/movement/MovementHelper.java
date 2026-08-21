@@ -693,21 +693,21 @@ public interface MovementHelper extends ActionCosts, Helper {
      * @param ctx The player context
      * @param b   the blockstate to mine
      */
-    static void switchToBestToolForPathClear(IPlayerContext ctx, BlockState b) {
+    static boolean switchToBestToolForPathClear(IPlayerContext ctx, BlockState b) {
         if (!Baritone.settings().autoTool.value || Baritone.settings().assumeExternalAutoTool.value) {
-            return;
+            return true;
         }
         Baritone baritone = (Baritone) BaritoneAPI.getProvider().getBaritoneForPlayer(ctx.player());
         if (baritone != null && baritone.getMineProcess().isTargetBlock(b)) {
             // target blocks (e.g. #mine ores) always use the unrestricted tool selection, even when
             // a movement breaks them as part of path clearing
             switchToBestToolFor(ctx, b);
-            return;
+            return true;
         }
         int maxTier = BaritoneAPI.getSettings().pathClearMaxToolTier.value;
         if (maxTier < 0) {
             switchToBestToolFor(ctx, b);
-            return;
+            return true;
         }
         boolean preferSilkTouch = BaritoneAPI.getSettings().preferSilkTouch.value;
         String logPrefix = "[PathClear] " + b + " maxTier=" + maxTier;
@@ -726,11 +726,27 @@ public interface MovementHelper extends ActionCosts, Helper {
             }
         }
         if (src == -1) {
-            // no in-cap tool available anywhere: use the default best tool and keep mining rather
-            // than stopping
-            ToolSet.logDebugDeduped(logPrefix + " -> no in-cap tool, using default");
-            switchToBestToolFor(ctx, b);
-            return;
+            // no in-cap tool available anywhere
+            if (Baritone.settings().pathClearContinueWhenToolExhausted.value) {
+                // keep mining by falling back to the unrestricted best tool
+                ToolSet.logDebugDeduped(logPrefix + " -> no in-cap tool, using default");
+                switchToBestToolFor(ctx, b);
+                return true;
+            }
+            if (!b.requiresCorrectToolForDrops()) {
+                // the block drops without a correct tool (e.g. gravel/sand/dirt): mine it by hand
+                // rather than wearing down a better tool
+                int hand = ts.getHandSlot();
+                if (hand != -1) {
+                    ctx.player().getInventory().setSelectedSlot(hand);
+                }
+                ToolSet.logDebugDeduped(logPrefix + " -> no in-cap tool, mining by hand");
+                return true;
+            }
+            // the block requires a correct tool and none remains within the limit: stop path clearing
+            // instead of falling back to a better tool
+            ToolSet.logDebugDeduped(logPrefix + " -> stopped (no in-cap tool and block needs one)");
+            return false;
         }
         // consolidate the chosen in-cap tool into the tool zone (from the backpack or elsewhere on
         // the hotbar). If the move is throttled this tick, use it in place when it's already on the
@@ -739,14 +755,15 @@ public interface MovementHelper extends ActionCosts, Helper {
         if (zoneSlot == -1) {
             if (src >= 0 && src < 9) {
                 ctx.player().getInventory().setSelectedSlot(src);
-                return;
+                return true;
             }
             switchToBestToolFor(ctx, b);
-            return;
+            return true;
         }
         ctx.player().getInventory().setSelectedSlot(zoneSlot);
         ItemStack stack = ctx.player().getInventory().getItem(zoneSlot);
         ToolSet.logDebugDeduped(logPrefix + " -> slot " + zoneSlot + " (" + (stack.isEmpty() ? "hand" : stack.getItem()) + ")" + extra);
+        return true;
     }
 
     static void moveTowards(IPlayerContext ctx, MovementState state, BlockPos pos) {
