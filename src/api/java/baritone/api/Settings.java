@@ -143,9 +143,9 @@ public final class Settings {
      * {@code true} (default) &mdash; never stop: fall back to the best tool and keep clearing.
      * <p>
      * {@code false} &mdash; conserve tools: when no in-limit tool remains, blocks that don't need a
-     * correct tool to drop (e.g. gravel, sand, dirt) are mined by hand, while blocks that require a
-     * correct tool (e.g. stone, ores) stop path clearing (the movement fails) instead of falling back
-     * to a better tool.
+     * correct tool to drop (e.g. gravel, sand, dirt) are mined by hand, while a block that requires a
+     * correct tool (e.g. stone, ores) stops the whole task (equivalent to {@code #stop}, with a
+     * notification) instead of falling back to a better tool.
      */
     public final Setting<Boolean> pathClearContinueWhenToolExhausted = new Setting<>(true);
 

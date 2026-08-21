@@ -743,9 +743,21 @@ public interface MovementHelper extends ActionCosts, Helper {
                 ToolSet.logDebugDeduped(logPrefix + " -> no in-cap tool, mining by hand");
                 return true;
             }
-            // the block requires a correct tool and none remains within the limit: stop path clearing
-            // instead of falling back to a better tool
-            ToolSet.logDebugDeduped(logPrefix + " -> stopped (no in-cap tool and block needs one)");
+            // the block requires a correct tool and none remains within the limit: stop the whole
+            // task rather than falling back to a better tool. Cancelling just this movement wouldn't
+            // stop anything &mdash; pathfinding cost always uses the default tool, so the process
+            // would re-path the same route and fail here again, spinning forever.
+            //
+            // We are being called from inside the current PathExecutor's onTick, so we must NOT null
+            // out the active segment (PathingBehavior#cancelEverything would, causing an NPE back in
+            // tickPath). Instead cancel only the processes: the UNREACHABLE we return then tears the
+            // segment down through the normal path, and next tick's preTick clears the goal since no
+            // process remains in control. Net effect matches #stop, tick-safely.
+            ToolSet.logDebugDeduped(logPrefix + " -> stopping task (no in-cap tool and block needs one)");
+            if (baritone != null) {
+                baritone.getPathingControlManager().cancelEverything();
+            }
+            Helper.HELPER.logNotification("Path-clearing tool exhausted within tier cap " + maxTier + ", stopping.", true);
             return false;
         }
         // consolidate the chosen in-cap tool into the tool zone (from the backpack or elsewhere on
