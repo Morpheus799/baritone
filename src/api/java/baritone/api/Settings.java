@@ -703,9 +703,11 @@ public final class Settings {
     public final Setting<Boolean> backfill = new Setting<>(false);
 
     /**
-     * When a hostile mob within {@link #mobLockRange} blocks has line of sight to the player and is
-     * facing them ("locked on"), temporarily behave as if {@link #backfill} is enabled &mdash; sealing
-     * the tunnel behind you to break the mob's line of sight so it loses aggro.
+     * When a hostile mob is close (within {@link #mobProximityRange}) or has locked onto the player
+     * (line of sight + facing, from up to {@link #mobLockRange}), temporarily behave as if
+     * {@link #backfill} is enabled &mdash; sealing the tunnel behind you to break line of sight so the
+     * mob loses aggro &mdash; and force an immediate re-path (which, for {@code #mine}, also re-selects
+     * the target block) so the reaction doesn't wait for the next path segment.
      * <p>
      * The user's {@link #backfill} setting is never modified. Instead this manages a separate
      * {@link #backfillTmp} flag that is OR'd into the backfill check, so there is no conflict with a
@@ -717,6 +719,13 @@ public final class Settings {
      * Range (in blocks) within which a line-of-sight-locked hostile mob activates {@link #backfillOnMobLock}.
      */
     public final Setting<Double> mobLockRange = new Setting<>(20.0D);
+
+    /**
+     * Range (in blocks) within which any hostile mob &mdash; regardless of line of sight or facing
+     * &mdash; counts as a threat for {@link #backfillOnMobLock}. Being this close, or being locked on
+     * from up to {@link #mobLockRange}, enables backfill and forces an immediate re-path.
+     */
+    public final Setting<Double> mobProximityRange = new Setting<>(6.0D);
 
     /**
      * Managed automatically by the {@link #backfillOnMobLock} trigger &mdash; do not set manually.

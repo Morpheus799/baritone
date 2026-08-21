@@ -30,11 +30,16 @@ import net.minecraft.world.phys.Vec3;
 /**
  * Persistent trigger for {@link baritone.api.Settings#backfillOnMobLock}.
  * <p>
- * While a hostile mob within {@code mobLockRange} has line of sight to the player and its head is
- * turned toward the player ("staring"), this temporarily enables backfill (via the managed
- * {@code backfillTmp} flag) so the tunnel behind the player is sealed, breaking the mob's line of
- * sight so it loses aggro. It clears automatically once no mob is locked on. The user's
+ * A hostile mob counts as a threat when it is either <em>close</em> (within {@code mobProximityRange},
+ * regardless of facing/line of sight) or <em>locked on</em> (line of sight to the player with its head
+ * turned toward the player, from up to {@code mobLockRange}). While threatened, this temporarily enables
+ * backfill (via the managed {@code backfillTmp} flag) so the tunnel behind the player is sealed, breaking
+ * line of sight so the mob loses aggro. It clears automatically once no threat remains. The user's
  * {@code backfill} setting is never touched.
+ * <p>
+ * The moment a threat first appears, it also forces an immediate re-path (abandoning the current path
+ * segment) so the reaction doesn't wait for the next segment boundary; for {@code #mine} this re-selects
+ * the target block too, since {@link baritone.process.MineProcess} recomputes its goal every tick.
  * <p>
  * When enabled, this writes debug lines to {@code logs/baritone.log} (and to chat when
  * {@code chatDebug} is on): the on/off transitions, and &mdash; while nothing is locked &mdash; why
@@ -84,6 +89,8 @@ public final class MobBackfillBehavior extends Behavior {
 
         double range = Baritone.settings().mobLockRange.value;
         double rangeSq = range * range;
+        double proximity = Baritone.settings().mobProximityRange.value;
+        double proximitySq = proximity * proximity;
         Vec3 playerEye = ctx.player().getEyePosition();
 
         Entity locked = null;
@@ -103,7 +110,10 @@ public final class MobBackfillBehavior extends Behavior {
             }
         }
 
-        if (locked != null) {
+        // a hostile is a threat if it locked on (line of sight + facing) or is simply very close
+        boolean near = nearest != null && nearestSq <= proximitySq;
+        boolean threat = locked != null || near;
+        if (threat) {
             lockCooldown = KEEP_TICKS;
         } else if (lockCooldown > 0) {
             lockCooldown--;
@@ -115,14 +125,30 @@ public final class MobBackfillBehavior extends Behavior {
             Baritone.settings().backfillTmp.value = want;
             if (want) {
                 Entity m = locked != null ? locked : nearest;
-                log("ON — locked by " + (m == null ? "?" : describe(m, playerEye)));
+                String why = locked != null ? "locked by " : "hostile within " + fmt(proximity) + "m: ";
+                log("ON — " + why + (m == null ? "?" : describe(m, playerEye)));
+                // a new threat just appeared: reassess now instead of waiting for the next segment
+                // boundary — recompute the target and re-path so backfill seals the chosen route
+                forceReplan();
             } else {
-                log("OFF — no lock for " + KEEP_TICKS + " ticks");
+                log("OFF — no threat for " + KEEP_TICKS + " ticks");
             }
             lastDiag = null; // let the diagnostic re-report after a state change
         } else if (!want) {
-            // enabled but not locked: record why the nearest hostile doesn't qualify (deduped)
+            // enabled but no threat: record why the nearest hostile doesn't qualify (deduped)
             diagnoseNotLocked(nearest, playerEye, range);
+        }
+    }
+
+    /**
+     * Abandon the current path segment so the in-control process re-plans immediately. {@code #mine}
+     * re-selects its target block as part of that, since {@link baritone.process.MineProcess} recomputes
+     * its goal every tick. No-op when nothing is being pathed.
+     */
+    private void forceReplan() {
+        if (baritone.getPathingBehavior().isPathing()) {
+            baritone.getPathingBehavior().secretInternalSegmentCancel();
+            log("forced re-path");
         }
     }
 
